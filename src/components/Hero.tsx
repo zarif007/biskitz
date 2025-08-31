@@ -8,8 +8,8 @@ const Hero = () => {
         className="absolute inset-0 opacity-20"
         style={{
           backgroundImage: `
-            linear-gradient(90deg, rgba(0,0,0,0.1) 1px, transparent 1px),
-            linear-gradient(rgba(0,0,0,0.1) 1px, transparent 1px)
+            linear-gradient(90deg, rgba(0,0,0,0.2) 1px, transparent 1px),
+            linear-gradient(rgba(0,0,0,0.2) 1px, transparent 1px)
           `,
           backgroundSize: "30px 30px",
         }}
@@ -19,8 +19,8 @@ const Hero = () => {
         className="absolute inset-0 opacity-30 dark:block hidden"
         style={{
           backgroundImage: `
-            linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px),
-            linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px)
+            linear-gradient(90deg, rgba(255,255,255,.2) 1px, transparent 1px),
+            linear-gradient(rgba(255,255,255,.2) 1px, transparent 1px)
           `,
           backgroundSize: "30px 30px",
         }}
@@ -34,7 +34,7 @@ const Hero = () => {
             </span>{" "}
           </h1>
           <p className="text-xl text-muted-foreground">
-            Create your own NPM package with{" "}
+            Create your own NPM packages with{" "}
             <span className="font-bold text-[black] dark:text-[white]">AI</span>
           </p>
         </div>

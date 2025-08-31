@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import ClientProviders from "./client-providers";
+import { TRPCReactProvider } from "@/trpc/client";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -16,15 +17,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body
-        className={
-          inter.className +
-          "mx-auto flex min-h-screen flex-col bg-background font-sans antialiased"
-        }
-      >
-        <ClientProviders>{children}</ClientProviders>
-      </body>
-    </html>
+    <TRPCReactProvider>
+      <html lang="en" suppressHydrationWarning>
+        <body
+          className={
+            inter.className +
+            "mx-auto flex min-h-screen flex-col bg-background font-sans antialiased"
+          }
+        >
+          <ClientProviders>{children}</ClientProviders>
+        </body>
+      </html>
+    </TRPCReactProvider>
   );
 }

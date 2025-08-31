@@ -14,6 +14,8 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import logo from "../../public/logo.png";
+import Image from "next/image";
 
 const navLinks = [
   { label: "Pricing", href: "/pricing" },
@@ -77,7 +79,7 @@ export function Header() {
 
         {/* Desktop Navigation */}
         <div className="hidden md:flex items-center gap-2 rounded-md border px-2 py-1">
-          <span className="font-bold text-xl">🧠</span>
+          <Image src={logo} alt="Logo" width={24} height={24} />
           {navLinks.map((item) => (
             <Link
               key={item.href}
