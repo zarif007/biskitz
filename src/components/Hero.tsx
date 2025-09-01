@@ -30,11 +30,11 @@ const Hero = () => {
           <h1 className="text-6xl md:text-8xl font-bold tracking-tight">
             Prompt to{" "}
             <span className="px-2 rounded-md animate-gradient-border bg-[length:400%_100%] bg-gradient-to-r from-rose-500 via-violet-500 to-blue-500 dark:from-rose-800 dark:via-violet-800 dark:to-blue-800">
-              Package
+              Packages
             </span>{" "}
           </h1>
           <p className="text-xl text-muted-foreground">
-            Create your own NPM packages with{" "}
+            Create your own NPM packages, UI Components, SDKs with{" "}
             <span className="font-bold text-[black] dark:text-[white]">AI</span>
           </p>
         </div>
