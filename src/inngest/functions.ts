@@ -1,10 +1,16 @@
 import { openai, createAgent } from "@inngest/agent-kit";
 import { inngest } from "./client";
+import { Sandbox } from "@e2b/code-interpreter";
+import { getSandbox } from "./utils";
 
 export const helloWorld = inngest.createFunction(
   { id: "Hello World Function" },
   { event: "biskitz/hello" },
   async ({ event, step }) => {
+    const sandboxId = await step.run("Create Sandbox", async () => {
+      const sandbox = await Sandbox.create("demo-nextjs-test2");
+      return sandbox.sandboxId;
+    });
     const agent = createAgent({
       name: "Test",
       system: "You are a helpful assistant.",
@@ -15,6 +21,12 @@ export const helloWorld = inngest.createFunction(
       `write a next js code on ${event.data.text}`
     );
 
-    return { output };
+    const sandboxUrl = await step.run("get-sandbox-url", async () => {
+      const sandbox = await getSandbox(sandboxId);
+      const host = sandbox.getHost(3000);
+      return `https://${host}`;
+    });
+
+    return { output, sandboxUrl };
   }
 );
