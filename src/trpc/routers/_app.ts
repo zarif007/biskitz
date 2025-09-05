@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { baseProcedure, createTRPCRouter } from "../init";
-import { inngest } from "@/inngest/client";
+import codeGen from "@/functions/codeGen";
 
 export const appRouter = createTRPCRouter({
   invoke: baseProcedure
@@ -10,12 +10,8 @@ export const appRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ input }) => {
-      await inngest.send({
-        name: "biskitz/hello",
-        data: {
-          text: input.text,
-        },
-      });
+      console.log("Invoking codeGen with prompt:", input.text);
+      return await codeGen(input.text);
     }),
 });
 

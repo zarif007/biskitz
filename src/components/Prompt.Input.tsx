@@ -19,14 +19,19 @@ const PromptInput = () => {
   const trpc = useTRPC();
   const invoke = useMutation(trpc.invoke.mutationOptions({}));
   const [userInput, setUserInput] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const onGenerate = async (input: string) => {
     if (!input) return;
+    setLoading(true);
     try {
-      await invoke.mutateAsync({ text: input });
       setUserInput("");
+      const res = await invoke.mutateAsync({ text: input });
+      console.log(res);
     } catch (error) {
-      console.error("Error invoking function:", error);
+      // Optionally handle error
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -45,11 +50,31 @@ const PromptInput = () => {
             />
             <Button
               size="icon"
-              className="absolute right-3 bottom-3 h-10 w-10"
+              className="absolute right-3 bottom-3 h-10 w-10 cursor-pointer"
               variant="default"
               onClick={() => onGenerate(userInput)}
+              disabled={loading}
             >
-              <ArrowUp className="w-5 h-5" />
+              {loading ? (
+                <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24">
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    fill="none"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                  />
+                </svg>
+              ) : (
+                <ArrowUp className="w-5 h-5" />
+              )}
             </Button>
             <div className="absolute left-3 bottom-3 flex gap-1 bg-white dark:bg-black font-bold">
               <Select defaultValue="npm">
