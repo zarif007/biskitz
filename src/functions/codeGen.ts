@@ -4,9 +4,10 @@ import { z } from "zod";
 import { Sandbox } from "@e2b/code-interpreter";
 import { getSandbox, lastAssistantTextMessage } from "../inngest/utils";
 import { PROMPT } from "@/constents/systemPrompts/prompt";
+import prisma from "@/lib/db";
 
 interface CodeGenState {
-  files: Record<string, string>;
+  files: { [path: string]: string };
   summary?: string;
   sandboxId: string;
 }
@@ -14,23 +15,21 @@ interface CodeGenState {
 interface CodeGenResult {
   url: string | null;
   title: string;
-  files: Record<string, string>;
+  files: { [path: string]: string };
   summary?: string;
   fullResult: any;
 }
 
-const codeGen = async (prompt: string): Promise<CodeGenResult> => {
-  // Create sandbox
+const codeGen = async (
+  prompt: string,
+  projectId: string
+): Promise<CodeGenResult> => {
   const sandbox = await Sandbox.create("demo-nextjs-test2");
   const sandboxId = sandbox.sandboxId;
-
-  // Initialize state
   const state: CodeGenState = {
     files: {},
     sandboxId,
   };
-
-  // Define tools for the AI
   const terminalTool = tool({
     description: "A terminal in a linux environment",
     inputSchema: z.object({
@@ -117,7 +116,6 @@ const codeGen = async (prompt: string): Promise<CodeGenResult> => {
     },
   });
 
-  // Main conversation loop (equivalent to network with maxIter: 7)
   let iterations = 0;
   const maxIterations = 7;
   const conversationHistory: Array<{
@@ -128,7 +126,7 @@ const codeGen = async (prompt: string): Promise<CodeGenResult> => {
   while (iterations < maxIterations && !state.summary) {
     try {
       const result = await generateText({
-        model: openai("gpt-5-mini"),
+        model: openai("gpt-4.1-mini"),
         system: PROMPT,
         messages: conversationHistory,
         tools: {
@@ -136,18 +134,15 @@ const codeGen = async (prompt: string): Promise<CodeGenResult> => {
           createOrUpdateFiles: createOrUpdateFilesTool,
           readFiles: readFilesTool,
         },
-        stopWhen: stepCountIs(10),
+        stopWhen: stepCountIs(2),
       });
 
-      // Add assistant response to conversation history
       conversationHistory.push({
         role: "assistant",
         content: result.text,
       });
 
-      // If no summary is found but the assistant seems to be done, break
       if (result.finishReason === "stop" && !result.toolCalls?.length) {
-        // Check if the response indicates completion
         const completionIndicators = [
           "task completed",
           "application is ready",
@@ -168,7 +163,6 @@ const codeGen = async (prompt: string): Promise<CodeGenResult> => {
 
       iterations++;
 
-      // Add a follow-up message if we're continuing
       if (iterations < maxIterations && !state.summary) {
         conversationHistory.push({
           role: "user",
@@ -182,7 +176,8 @@ const codeGen = async (prompt: string): Promise<CodeGenResult> => {
     }
   }
 
-  // Get sandbox URL
+  const isError = Object.keys(state.files || {}).length === 0;
+
   let sandboxUrl: string | null = null;
   try {
     const sandbox = await getSandbox(sandboxId);
@@ -193,7 +188,33 @@ const codeGen = async (prompt: string): Promise<CodeGenResult> => {
     sandboxUrl = null;
   }
 
-  // Return final result
+  if (isError) {
+    await prisma.message.create({
+      data: {
+        projectId,
+        content: "Something went wrong, please try again.",
+        role: "ASSISTANT",
+        type: "ERROR",
+      },
+    });
+  } else {
+    await prisma.message.create({
+      data: {
+        projectId,
+        content: state.summary || prompt,
+        role: "ASSISTANT",
+        type: "RESULT",
+        fragment: {
+          create: {
+            sandboxUrl: sandboxUrl as string,
+            files: state.files,
+            title: "Fragment",
+          },
+        },
+      },
+    });
+  }
+
   const finalResult: CodeGenResult = {
     url: sandboxUrl,
     title: "Fragment",

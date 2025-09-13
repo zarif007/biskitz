@@ -1,4 +1,4 @@
-import React from "react";
+import React, { use } from "react";
 import PromptInput from "./Prompt.Input";
 
 const Hero = () => {
@@ -39,6 +39,9 @@ const Hero = () => {
           </p>
         </div>
         <PromptInput />
+        <p className="text-sm text-muted-foreground mt-2">
+          Vibe code responsibly
+        </p>
       </div>
     </div>
   );

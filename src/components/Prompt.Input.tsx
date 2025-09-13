@@ -4,7 +4,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { ArrowUp } from "lucide-react";
 import Image from "next/image";
-import { useContext, useState } from "react";
+import { useState } from "react";
 import {
   Select,
   SelectContent,
@@ -14,10 +14,12 @@ import {
 } from "@/components/ui/select";
 import { useTRPC } from "@/trpc/client";
 import { useMutation } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 
 const PromptInput = () => {
   const trpc = useTRPC();
-  const invoke = useMutation(trpc.invoke.mutationOptions({}));
+  const router = useRouter();
+  const createProject = useMutation(trpc.project.create.mutationOptions({}));
   const [userInput, setUserInput] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -26,8 +28,9 @@ const PromptInput = () => {
     setLoading(true);
     try {
       setUserInput("");
-      const res = await invoke.mutateAsync({ text: input });
+      const res = await createProject.mutateAsync({ value: input });
       console.log(res);
+      router.push(`/projects/${res.id}`);
     } catch (error) {
       // Optionally handle error
     } finally {

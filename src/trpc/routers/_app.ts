@@ -1,18 +1,10 @@
-import { z } from "zod";
-import { baseProcedure, createTRPCRouter } from "../init";
-import codeGen from "@/functions/codeGen";
+import { projectsRouter } from "@/modules/projects/server/procedures";
+import { createTRPCRouter } from "../init";
+import { messageRouter } from "@/modules/messages/server/procedures";
 
 export const appRouter = createTRPCRouter({
-  invoke: baseProcedure
-    .input(
-      z.object({
-        text: z.string(),
-      })
-    )
-    .mutation(async ({ input }) => {
-      console.log("Invoking codeGen with prompt:", input.text);
-      return await codeGen(input.text);
-    }),
+  messages: messageRouter,
+  project: projectsRouter,
 });
 
 export type AppRouter = typeof appRouter;
