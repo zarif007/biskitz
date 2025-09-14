@@ -32,7 +32,6 @@ const PromptInput = () => {
       console.log(res);
       router.push(`/projects/${res.id}`);
     } catch (error) {
-      // Optionally handle error
     } finally {
       setLoading(false);
     }
