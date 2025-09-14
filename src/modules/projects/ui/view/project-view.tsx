@@ -1,7 +1,7 @@
 "use client";
 
 import { useTRPC } from "@/trpc/client";
-import React, { Suspense } from "react";
+import React, { Suspense, useState } from "react";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -14,40 +14,77 @@ import {
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
-import { Fragment } from "@/generated/prisma";
+import { Fragment, MessageRole, MessageType } from "@/generated/prisma";
 
 interface Props {
   projectId: string;
 }
 
 export const ProjectView = ({ projectId }: Props) => {
+  const [activeFragment, setActiveFragment] = useState<Fragment | null>(null);
   const trpc = useTRPC();
   const queryClient = useQueryClient();
+
   const { data: messages } = useSuspenseQuery(
     trpc.messages.getMany.queryOptions({ projectId })
   );
 
   const createMessage = useMutation(
     trpc.messages.create.mutationOptions({
-      onSuccess: () => {
+      onMutate: async (variables) => {
+        await queryClient.cancelQueries(
+          trpc.messages.getMany.queryOptions({ projectId })
+        );
+
+        const previousMessages = queryClient.getQueryData(
+          trpc.messages.getMany.queryOptions({ projectId }).queryKey
+        );
+
+        const optimisticUserMessage = {
+          id: `temp-${Date.now()}`,
+          role: MessageRole.USER,
+          content: variables.value,
+          createdAt: new Date(),
+          fragment: null,
+          type: MessageType.RESULT,
+          projectId: variables.projectId,
+        };
+
+        queryClient.setQueryData(
+          trpc.messages.getMany.queryOptions({ projectId }).queryKey,
+          (old: any) => [...(old || []), optimisticUserMessage]
+        );
+
+        return { previousMessages };
+      },
+      onError: (error, variables, context) => {
+        queryClient.setQueryData(
+          trpc.messages.getMany.queryOptions({ projectId }).queryKey,
+          context?.previousMessages
+        );
+        console.error("Error creating message:", error);
+      },
+      onSettled: () => {
         queryClient.invalidateQueries(
           trpc.messages.getMany.queryOptions({ projectId })
         );
-      },
-      onError: (error) => {
-        console.error("Error creating message:", error);
       },
     })
   );
 
   const isMessageCreationPending = createMessage.isPending;
 
-  const handleFragmentClicked = (fragment: Fragment) => {
+  const handleFragmentClicked = (fragment: Fragment | null) => {
     console.log("Fragment clicked:", fragment);
+    setActiveFragment(fragment);
   };
 
   const handleCreateMessage = async (content: string) => {
-    await createMessage.mutateAsync({ value: content, projectId });
+    try {
+      await createMessage.mutateAsync({ value: content, projectId });
+    } catch (error) {
+      console.error("Message creation failed:", error);
+    }
   };
 
   return (
@@ -59,6 +96,7 @@ export const ProjectView = ({ projectId }: Props) => {
               messages={messages || []}
               isMessageCreationPending={isMessageCreationPending}
               onCreateMessage={handleCreateMessage}
+              activeFragment={activeFragment}
               onFragmentClicked={handleFragmentClicked}
             />
           </Suspense>

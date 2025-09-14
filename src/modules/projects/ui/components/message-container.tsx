@@ -15,6 +15,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Fragment, MessageRole, MessageType } from "@/generated/prisma";
+import MessageLoader from "./message-loader";
 
 interface Message {
   role: MessageRole;
@@ -22,17 +23,21 @@ interface Message {
   createdAt: Date;
   fragment: Fragment | null;
   type: MessageType;
+  id?: string;
+  isOptimistic?: boolean;
 }
 
 interface Props {
   messages: Message[];
   isMessageCreationPending: boolean;
   onCreateMessage: (content: string) => void;
-  onFragmentClicked: (fragment: Fragment) => void;
+  activeFragment: Fragment | null;
+  onFragmentClicked: (fragment: Fragment | null) => void;
 }
 
 const MessageContainer = ({
   messages,
+  activeFragment,
   onFragmentClicked,
   isMessageCreationPending,
   onCreateMessage,
@@ -42,25 +47,48 @@ const MessageContainer = ({
   const [expandedFragmentIdx, setExpandedFragmentIdx] = useState<number | null>(
     null
   );
+  const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]);
+
+  // Combine real messages with optimistic messages
+  const allMessages = [...messages, ...optimisticMessages];
 
   useEffect(() => {
-    const lastAssistantMessageIdx = messages.findLast(
+    const lastAssistantMessage = allMessages.findLast(
       (m) => m.role === "ASSISTANT"
     );
 
-    if (lastAssistantMessageIdx) {
-      // Activate Fragment view or any other action
+    if (lastAssistantMessage) {
+      onFragmentClicked(lastAssistantMessage.fragment);
     }
-  }, [messages]);
+  }, [allMessages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [allMessages.length]);
+
+  // Clear optimistic messages when real messages update
+  useEffect(() => {
+    setOptimisticMessages([]);
   }, [messages.length]);
 
   const handleSend = () => {
     if (inputValue.trim()) {
+      const messageContent = inputValue.trim();
+
+      const optimisticUserMessage: Message = {
+        role: MessageRole.USER,
+        content: messageContent,
+        createdAt: new Date(),
+        fragment: null,
+        type: MessageType.RESULT,
+        id: `optimistic-${Date.now()}`,
+        isOptimistic: true,
+      };
+
+      setOptimisticMessages([optimisticUserMessage]);
       setInputValue("");
-      onCreateMessage(inputValue.trim());
+
+      onCreateMessage(messageContent);
     }
   };
 
@@ -71,15 +99,18 @@ const MessageContainer = ({
     }
   };
 
+  const lastMessage = allMessages[allMessages.length - 1];
+  const lastUserMessage = lastMessage?.role === "USER";
+
   return (
     <div className="relative h-full border-r bg-white dark:bg-gray-950">
-      <div className="flex items-center justify-between p-4 border-b bg-gray-50 dark:bg-gray-900">
+      <div className="flex items-center justify-between p-4 border-b bg-gray-50 dark:bg-gray-950">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-sm bg-white dark:bg-gray-800 shadow-sm">
+          <div className="p-2 rounded-sm bg-white dark:bg-gray-900 shadow-sm">
             <MessageCircle className="w-4 h-4 text-gray-700 dark:text-gray-300" />
           </div>
           <div>
-            <h2 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            <h2 className="text-sm font-medium text-gray-950 dark:text-gray-100">
               Messages
             </h2>
             <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -88,17 +119,17 @@ const MessageContainer = ({
           </div>
         </div>
         <Badge variant="outline" className="text-xs">
-          {messages.length}
+          {allMessages.length}
         </Badge>
       </div>
       <ScrollArea className="h-[calc(100%-8rem)]">
         <div className="p-4 space-y-4 mb-10">
-          {messages.length === 0 ? (
+          {allMessages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center">
-              <div className="p-4 rounded-full bg-gray-100 dark:bg-gray-800 mb-4">
+              <div className="p-4 rounded-full bg-gray-100 dark:bg-gray-900 mb-4">
                 <MessageCircle className="w-8 h-8 text-gray-400 dark:text-gray-600" />
               </div>
-              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
+              <h3 className="text-sm font-medium text-gray-950 dark:text-gray-100 mb-1">
                 No messages yet
               </h3>
               <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -106,29 +137,33 @@ const MessageContainer = ({
               </p>
             </div>
           ) : (
-            messages.map((message, index) => {
+            allMessages.map((message, index) => {
               const isAssistant =
                 message.role === MessageRole.ASSISTANT ||
                 message.role?.toString().toUpperCase() === "ASSISTANT";
+
+              // Add visual indicator for optimistic messages
+              const isOptimistic = message.isOptimistic;
+
               return (
                 <div
-                  key={index}
+                  key={message.id || index}
                   className={`flex gap-3 ${
                     isAssistant ? "flex-row" : "flex-row-reverse"
-                  }`}
+                  } ${isOptimistic ? "opacity-70" : ""}`}
                 >
                   <div className="flex-shrink-0">
                     <div
                       className={`w-8 h-8 rounded-full flex items-center justify-center ${
                         isAssistant
-                          ? "bg-gray-100 dark:bg-gray-800"
-                          : "bg-gray-900 dark:bg-gray-100"
+                          ? "bg-gray-100 dark:bg-gray-900"
+                          : "bg-gray-950 dark:bg-gray-100"
                       }`}
                     >
                       {isAssistant ? (
                         <Bot className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                       ) : (
-                        <User className="w-4 h-4 text-white dark:text-gray-900" />
+                        <User className="w-4 h-4 text-white dark:text-gray-950" />
                       )}
                     </div>
                   </div>
@@ -136,21 +171,28 @@ const MessageContainer = ({
                     <Card
                       className={`p-3 shadow-sm ${
                         isAssistant
-                          ? "bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700"
-                          : "bg-gray-900 dark:bg-gray-100 border-gray-900 dark:border-gray-100"
+                          ? "bg-gray-50 dark:bg-gray-950 border-gray-200 dark:border-gray-700"
+                          : "bg-gray-950 dark:bg-gray-100 border-gray-950 dark:border-gray-100"
                       }`}
                     >
                       <p
                         className={`text-sm leading-relaxed ${
                           isAssistant
-                            ? "text-gray-900 dark:text-gray-100"
-                            : "text-white dark:text-gray-900"
+                            ? "text-gray-950 dark:text-gray-100"
+                            : "text-white dark:text-gray-950"
                         }`}
                       >
                         {message.content}
                       </p>
                       {message.fragment && (
-                        <div className="p-2 rounded-sm bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                        <div
+                          className={`p-2 rounded-sm bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 ${
+                            activeFragment &&
+                            message.fragment.id === activeFragment.id
+                              ? "ring-2 ring-blue-500"
+                              : ""
+                          }`}
+                        >
                           <div
                             className="flex items-center justify-between cursor-pointer"
                             onClick={() => {
@@ -212,12 +254,18 @@ const MessageContainer = ({
                           minute: "2-digit",
                         })}
                       </span>
+                      {isOptimistic && (
+                        <span className="text-xs text-gray-400 ml-1">
+                          (sending...)
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
               );
             })
           )}
+          {(lastUserMessage || isMessageCreationPending) && <MessageLoader />}
           <div ref={bottomRef} />
         </div>
       </ScrollArea>
@@ -230,18 +278,14 @@ const MessageContainer = ({
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Type your message... (Press Enter to send, Shift+Enter for new line)"
-              className={`w-full resize-none text-sm min-h-[64px] max-h-[120px] pr-12 bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-sm focus:ring-0 transition-opacity duration-200 ${
-                isMessageCreationPending ? "opacity-60 cursor-not-allowed" : ""
-              }`}
-              disabled={isMessageCreationPending}
+              className="w-full resize-none text-sm min-h-[64px] max-h-[120px] pr-12 bg-gray-50 dark:bg-gray-950 border-gray-200 dark:border-gray-700 rounded-sm focus:ring-0"
+              disabled={false} // Never disable the input
             />
             <Button
               onClick={handleSend}
-              disabled={!inputValue.trim() || isMessageCreationPending}
+              disabled={!inputValue.trim()}
               size="sm"
-              className={`absolute right-2 bottom-2 h-8 px-2 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-gray-200 dark:text-gray-900 transition-opacity duration-200 ${
-                isMessageCreationPending ? "opacity-60 cursor-not-allowed" : ""
-              }`}
+              className="absolute right-2 bottom-2 h-8 px-2 bg-gray-950 hover:bg-gray-900 dark:bg-gray-100 dark:hover:bg-gray-200 dark:text-gray-950"
             >
               {isMessageCreationPending ? (
                 <svg
