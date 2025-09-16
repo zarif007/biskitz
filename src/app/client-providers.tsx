@@ -13,7 +13,7 @@ const ClientProviders = ({ children }: { children: React.ReactNode }) => {
       disableTransitionOnChange
     >
       <Header />
-      {children}
+      <div className="mt-14">{children}</div>
     </ThemeProvider>
   );
 };

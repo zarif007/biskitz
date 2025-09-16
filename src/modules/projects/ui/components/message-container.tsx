@@ -49,7 +49,6 @@ const MessageContainer = ({
   );
   const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]);
 
-  // Combine real messages with optimistic messages
   const allMessages = [...messages, ...optimisticMessages];
 
   useEffect(() => {
@@ -60,13 +59,12 @@ const MessageContainer = ({
     if (lastAssistantMessage) {
       onFragmentClicked(lastAssistantMessage.fragment);
     }
-  }, [allMessages]);
+  }, [messages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [allMessages.length]);
+  }, [messages.length]);
 
-  // Clear optimistic messages when real messages update
   useEffect(() => {
     setOptimisticMessages([]);
   }, [messages.length]);
