@@ -2,7 +2,7 @@ import { openai } from "@ai-sdk/openai";
 import { generateText, stepCountIs, tool } from "ai";
 import { z } from "zod";
 import { Sandbox } from "@e2b/code-interpreter";
-import { getSandbox, lastAssistantTextMessage } from "../inngest/utils";
+import { getSandbox } from "../inngest/utils";
 import { PROMPT } from "@/constents/systemPrompts/prompt";
 import prisma from "@/lib/db";
 
@@ -117,7 +117,7 @@ const codeGen = async (
   });
 
   let iterations = 0;
-  const maxIterations = 7;
+  const maxIterations = 1;
   const conversationHistory: Array<{
     role: "user" | "assistant";
     content: string;

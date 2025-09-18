@@ -25,7 +25,7 @@ const Hero = () => {
           backgroundSize: "30px 30px",
         }}
       />
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 mx-2">
+      <div className="fixed inset-0 flex flex-col items-center justify-center gap-6 mx-2">
         <div className="text-center space-y-4">
           <h1 className="text-6xl md:text-8xl font-bold tracking-tight">
             Prompt to{" "}

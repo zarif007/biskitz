@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Fragment, MessageRole, MessageType } from "@/generated/prisma";
 import MessageLoader from "./message-loader";
+import { useSession } from "next-auth/react";
 
 interface Message {
   role: MessageRole;
@@ -42,6 +43,8 @@ const MessageContainer = ({
   isMessageCreationPending,
   onCreateMessage,
 }: Props) => {
+  const { data: session } = useSession();
+
   const bottomRef = React.useRef<HTMLDivElement | null>(null);
   const [inputValue, setInputValue] = useState("");
   const [expandedFragmentIdx, setExpandedFragmentIdx] = useState<number | null>(
@@ -102,26 +105,8 @@ const MessageContainer = ({
 
   return (
     <div className="relative h-full border-r bg-white dark:bg-gray-950">
-      <div className="flex items-center justify-between p-4 border-b bg-gray-50 dark:bg-gray-950">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-sm bg-white dark:bg-gray-900 shadow-sm">
-            <MessageCircle className="w-4 h-4 text-gray-700 dark:text-gray-300" />
-          </div>
-          <div>
-            <h2 className="text-sm font-medium text-gray-950 dark:text-gray-100">
-              Messages
-            </h2>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Conversation
-            </p>
-          </div>
-        </div>
-        <Badge variant="outline" className="text-xs">
-          {allMessages.length}
-        </Badge>
-      </div>
       <ScrollArea className="h-[calc(100%-8rem)]">
-        <div className="p-4 space-y-4 mb-10">
+        <div className="p-4 space-y-4">
           {allMessages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <div className="p-4 rounded-full bg-gray-100 dark:bg-gray-900 mb-4">
@@ -160,6 +145,12 @@ const MessageContainer = ({
                     >
                       {isAssistant ? (
                         <Bot className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                      ) : session?.user?.image ? (
+                        <img
+                          src={session.user.image}
+                          alt={session.user.name || "User"}
+                          className="w-8 h-8 rounded-full object-cover"
+                        />
                       ) : (
                         <User className="w-4 h-4 text-white dark:text-gray-950" />
                       )}

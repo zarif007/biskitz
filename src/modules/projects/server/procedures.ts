@@ -23,6 +23,7 @@ export const projectsRouter = createTRPCRouter({
               createdAt: "asc",
             },
           },
+          user: {},
         },
       });
 
@@ -51,10 +52,20 @@ export const projectsRouter = createTRPCRouter({
           .max(5000, "Prompt is too long"),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      if (!ctx.session?.user?.email) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "You must be logged in to create a project",
+        });
+      }
+
       const createdProject = await prisma.project.create({
         data: {
           name: generateSlug(2, { format: "kebab" }),
+          user: {
+            connect: { email: ctx.session.user.email },
+          },
           messages: {
             create: {
               content: input.value,

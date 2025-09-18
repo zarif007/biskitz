@@ -117,6 +117,7 @@ const FragmentWeb = ({ activeFragment }: Props) => {
           </div>
         )}
         <iframe
+          key={activeFragment.sandboxUrl}
           className="w-full h-full border-0"
           sandbox="allow-forms allow-scripts allow-same-origin"
           loading="lazy"

@@ -20,7 +20,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Code2Icon, CrownIcon, EyeIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import CodeView from "@/components/code-view/code-view";
 import FileExplorer from "@/components/FileExplorer";
 
 interface Props {
@@ -83,7 +82,6 @@ export const ProjectView = ({ projectId }: Props) => {
   const isMessageCreationPending = createMessage.isPending;
 
   const handleFragmentClicked = (fragment: Fragment | null) => {
-    console.log("Fragment clicked:", fragment);
     setActiveFragment(fragment);
   };
 
