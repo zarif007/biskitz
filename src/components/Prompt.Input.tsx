@@ -29,9 +29,9 @@ const PromptInput = () => {
     try {
       setUserInput("");
       const res = await createProject.mutateAsync({ value: input });
-      console.log(res);
       router.push(`/projects/${res.id}`);
     } catch (error) {
+      console.log(error);
     } finally {
       setLoading(false);
     }

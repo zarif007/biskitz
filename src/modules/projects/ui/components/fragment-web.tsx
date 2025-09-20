@@ -12,11 +12,7 @@ import {
   ExternalLink,
   Check,
 } from "lucide-react";
-
-interface Fragment {
-  sandboxUrl: string;
-  title?: string;
-}
+import { Fragment } from "@/generated/prisma";
 
 interface Props {
   activeFragment: Fragment;
@@ -121,7 +117,7 @@ const FragmentWeb = ({ activeFragment }: Props) => {
           className="w-full h-full border-0"
           sandbox="allow-forms allow-scripts allow-same-origin"
           loading="lazy"
-          src={activeFragment.sandboxUrl}
+          src={activeFragment.sandboxUrl ?? "google.com"}
           title="Fragment Content"
         />
       </div>

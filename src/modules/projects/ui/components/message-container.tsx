@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,9 +14,16 @@ import {
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Fragment, MessageRole, MessageType } from "@/generated/prisma";
+import {
+  Fragment,
+  FragmentType,
+  MessageRole,
+  MessageType,
+} from "@/generated/prisma";
 import MessageLoader from "./message-loader";
 import { useSession } from "next-auth/react";
+import businessAnalyst from "@/agents/businessAnalyst";
+import AssistantAvatar from "./assistant-avatar";
 
 interface Message {
   role: MessageRole;
@@ -25,13 +32,20 @@ interface Message {
   fragment: Fragment | null;
   type: MessageType;
   id?: string;
-  isOptimistic?: boolean;
 }
 
 interface Props {
   messages: Message[];
   isMessageCreationPending: boolean;
-  onCreateMessage: (content: string) => void;
+  onCreateMessage: (msg: {
+    content: string;
+    role: MessageRole;
+    fragment?: {
+      type: FragmentType;
+      title: string;
+      files: Record<string, string>;
+    };
+  }) => void;
   activeFragment: Fragment | null;
   onFragmentClicked: (fragment: Fragment | null) => void;
 }
@@ -44,53 +58,70 @@ const MessageContainer = ({
   onCreateMessage,
 }: Props) => {
   const { data: session } = useSession();
-
-  const bottomRef = React.useRef<HTMLDivElement | null>(null);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
   const [inputValue, setInputValue] = useState("");
+  const [nextFrom, setNextFrom] = useState<MessageRole>("BUSINESS_ANALYST");
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [expandedFragmentIdx, setExpandedFragmentIdx] = useState<number | null>(
     null
   );
-  const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]);
-
-  const allMessages = [...messages, ...optimisticMessages];
-
-  useEffect(() => {
-    const lastAssistantMessage = allMessages.findLast(
-      (m) => m.role === "ASSISTANT"
-    );
-
-    if (lastAssistantMessage) {
-      onFragmentClicked(lastAssistantMessage.fragment);
-    }
-  }, [messages]);
+  const hasProcessedInitialUserMessage = useRef(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
 
   useEffect(() => {
-    setOptimisticMessages([]);
-  }, [messages.length]);
+    const lastAssistantMessage = messages.findLast(
+      (m) => m.role !== MessageRole.USER
+    );
+
+    if (lastAssistantMessage?.fragment) {
+      onFragmentClicked(lastAssistantMessage.fragment);
+    }
+  }, [messages, onFragmentClicked]);
+
+  useEffect(() => {
+    if (hasProcessedInitialUserMessage.current) return;
+
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage?.role === MessageRole.USER) {
+      handleBusinessAnalyst(lastMessage.content);
+      hasProcessedInitialUserMessage.current = true;
+      setNextFrom(MessageRole.BUSINESS_ANALYST);
+    }
+  }, [messages]);
+
+  const handleBusinessAnalyst = async (prompt: string) => {
+    try {
+      setIsProcessing(true);
+      const businessAnalystRes = await businessAnalyst(prompt);
+      onCreateMessage({
+        content: "Analysis Report",
+        role: MessageRole.BUSINESS_ANALYST,
+        fragment: {
+          type: FragmentType.DOC,
+          files: { ["Analysis Report"]: businessAnalystRes ?? "" },
+          title: "Fragment",
+        },
+      });
+    } catch (e) {
+      console.error("Error generating code:", e);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const handleSend = () => {
-    if (inputValue.trim()) {
-      const messageContent = inputValue.trim();
+    if (!inputValue.trim()) return;
 
-      const optimisticUserMessage: Message = {
-        role: MessageRole.USER,
-        content: messageContent,
-        createdAt: new Date(),
-        fragment: null,
-        type: MessageType.RESULT,
-        id: `optimistic-${Date.now()}`,
-        isOptimistic: true,
-      };
-
-      setOptimisticMessages([optimisticUserMessage]);
-      setInputValue("");
-
-      onCreateMessage(messageContent);
-    }
+    const messageContent = inputValue.trim();
+    setInputValue("");
+    onCreateMessage({
+      content: messageContent,
+      role: MessageRole.USER,
+    });
+    handleBusinessAnalyst(messageContent);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -100,14 +131,11 @@ const MessageContainer = ({
     }
   };
 
-  const lastMessage = allMessages[allMessages.length - 1];
-  const lastUserMessage = lastMessage?.role === "USER";
-
   return (
     <div className="relative h-full border-r bg-white dark:bg-gray-950">
       <ScrollArea className="h-[calc(100%-8rem)]">
         <div className="p-4 space-y-4">
-          {allMessages.length === 0 ? (
+          {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <div className="p-4 rounded-full bg-gray-100 dark:bg-gray-900 mb-4">
                 <MessageCircle className="w-8 h-8 text-gray-400 dark:text-gray-600" />
@@ -120,20 +148,15 @@ const MessageContainer = ({
               </p>
             </div>
           ) : (
-            allMessages.map((message, index) => {
-              const isAssistant =
-                message.role === MessageRole.ASSISTANT ||
-                message.role?.toString().toUpperCase() === "ASSISTANT";
-
-              // Add visual indicator for optimistic messages
-              const isOptimistic = message.isOptimistic;
+            messages.map((message, index) => {
+              const isAssistant = message.role !== MessageRole.USER;
 
               return (
                 <div
                   key={message.id || index}
                   className={`flex gap-3 ${
                     isAssistant ? "flex-row" : "flex-row-reverse"
-                  } ${isOptimistic ? "opacity-70" : ""}`}
+                  }`}
                 >
                   <div className="flex-shrink-0">
                     <div
@@ -144,7 +167,7 @@ const MessageContainer = ({
                       }`}
                     >
                       {isAssistant ? (
-                        <Bot className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                        <AssistantAvatar type={message.role} />
                       ) : session?.user?.image ? (
                         <img
                           src={session.user.image}
@@ -243,18 +266,13 @@ const MessageContainer = ({
                           minute: "2-digit",
                         })}
                       </span>
-                      {isOptimistic && (
-                        <span className="text-xs text-gray-400 ml-1">
-                          (sending...)
-                        </span>
-                      )}
                     </div>
                   </div>
                 </div>
               );
             })
           )}
-          {(lastUserMessage || isMessageCreationPending) && <MessageLoader />}
+          {isProcessing && <MessageLoader type={nextFrom} />}
           <div ref={bottomRef} />
         </div>
       </ScrollArea>
@@ -268,15 +286,15 @@ const MessageContainer = ({
               onKeyDown={handleKeyDown}
               placeholder="Type your message... (Press Enter to send, Shift+Enter for new line)"
               className="w-full resize-none text-sm min-h-[64px] max-h-[120px] pr-12 bg-gray-50 dark:bg-gray-950 border-gray-200 dark:border-gray-700 rounded-sm focus:ring-0"
-              disabled={false} // Never disable the input
+              disabled={isProcessing}
             />
             <Button
               onClick={handleSend}
-              disabled={!inputValue.trim()}
+              disabled={!inputValue.trim() || isProcessing}
               size="sm"
               className="absolute right-2 bottom-2 h-8 px-2 bg-gray-950 hover:bg-gray-900 dark:bg-gray-100 dark:hover:bg-gray-200 dark:text-gray-950"
             >
-              {isMessageCreationPending ? (
+              {isMessageCreationPending || isProcessing ? (
                 <svg
                   className="w-4 h-4 animate-spin text-gray-400"
                   viewBox="0 0 24 24"

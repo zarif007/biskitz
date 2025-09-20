@@ -18,11 +18,23 @@ enum MessageRole {
   USER
   ASSISTANT
   SYSTEM
+
+  BUSINESS_ANALYST
+  SYSTEM_ARCHITECT
+  DEVELOPER
+  TESTER
+  SECURITY_ANALYST
+  DEV_OPS
 }
 
 enum MessageType {
   RESULT
   ERROR
+}
+
+enum FragmentType {
+  DOC
+  CODE
 }
 
 model Message {
@@ -42,7 +54,8 @@ model Fragment {
   messageId String @unique
   message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
-  sandboxUrl String
+  type FragmentType
+  sandboxUrl String?
   title String
   files Json
 

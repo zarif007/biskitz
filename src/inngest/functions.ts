@@ -7,7 +7,7 @@ import {
 import { inngest } from "./client";
 import { Sandbox } from "@e2b/code-interpreter";
 import { getSandbox, lastAssistantTextMessage } from "./utils";
-import { PROMPT } from "@/constents/systemPrompts/prompt";
+import { PROMPT } from "@/constants/systemPrompts/prompt";
 
 export const helloWorld = inngest.createFunction(
   { id: "Hello World Function" },

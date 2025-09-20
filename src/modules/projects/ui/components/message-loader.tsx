@@ -1,35 +1,71 @@
-import { Bot } from "lucide-react";
+import { MessageRole } from "@/generated/prisma";
+import Image from "next/image";
 import React, { useEffect, useState } from "react";
 
-const ShimmerMessages = [
-  "Thinking...",
-  "Generating response...",
-  "Analyzing data...",
-  "Processing your request...",
-  "Almost there...",
-];
-
-const MessageLoader = () => {
+const MessageLoader = ({ type }: { type: MessageRole }) => {
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
+
+  const roleImageMap: Record<MessageRole, string> = {
+    USER: "/agents/user.png",
+    ASSISTANT: "/agents/assistant.png",
+    SYSTEM: "/agents/system.png",
+    BUSINESS_ANALYST: "/agents/ba.png",
+    SYSTEM_ARCHITECT: "/agents/sys_arch.png",
+    DEVELOPER: "/agents/dev.png",
+    TESTER: "/agents/tester.png",
+    SECURITY_ANALYST: "/agents/security.png",
+    DEV_OPS: "/agents/devops.png",
+  };
+
+  const roleMessages: Record<MessageRole, string[]> = {
+    USER: ["Processing input", "Understanding request"],
+    ASSISTANT: ["Generating response", "Processing query"],
+    SYSTEM: ["Initializing system", "Configuring settings"],
+    BUSINESS_ANALYST: [
+      "Analyzing request",
+      "Writing docs",
+      "Gathering requirements",
+    ],
+    SYSTEM_ARCHITECT: [
+      "Designing architecture",
+      "Planning system",
+      "Optimizing structure",
+    ],
+    DEVELOPER: ["Writing code", "Debugging logic", "Building features"],
+    TESTER: ["Running tests", "Validating functionality", "Ensuring quality"],
+    SECURITY_ANALYST: [
+      "Scanning for vulnerabilities",
+      "Securing system",
+      "Analyzing threats",
+    ],
+    DEV_OPS: [
+      "Deploying updates",
+      "Monitoring systems",
+      "Configuring pipelines",
+    ],
+  };
+
+  const messages = roleMessages[type] || ["Processing..."];
+  const imageSrc = roleImageMap[type] || "/agents/assistant.png";
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentMessageIndex((prevIndex) =>
-        prevIndex === ShimmerMessages.length - 1 ? 0 : prevIndex + 1
-      );
+      setCurrentMessageIndex((prev) => (prev + 1) % messages.length);
     }, 2000);
-  }, []);
+    return () => clearInterval(interval);
+  }, [messages.length]);
+
   return (
-    <div className="flex flex-col group px-2 pb-4">
-      <div className="flex items-center gap-2 pl-2 mb-2">
-        <Bot className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-      </div>
-      <div className="pl-8.5 flex flex-col gap-y-4">
-        <div className="flex items-center gap-2">
-          <span className="text-base text-muted-foreground animate-pulse">
-            {ShimmerMessages[currentMessageIndex]}
-          </span>
-        </div>
+    <div className="flex flex-col items-center justify-center w-full h-full">
+      <Image
+        src={imageSrc}
+        alt={`${type} loader`}
+        width={60}
+        height={60}
+        className="object-cover"
+      />
+      <div className="text-gray-600 dark:text-gray-400 text-md animate-pulse mt-1">
+        {messages[currentMessageIndex]}
       </div>
     </div>
   );

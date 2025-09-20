@@ -1,7 +1,6 @@
 import z from "zod";
 import { baseProcedure, createTRPCRouter } from "@/trpc/init";
 import prisma from "@/lib/db";
-import codeGen from "@/functions/codeGen";
 import { generateSlug } from "random-word-slugs";
 import { TRPCError } from "@trpc/server";
 
@@ -75,8 +74,6 @@ export const projectsRouter = createTRPCRouter({
           },
         },
       });
-
-      await codeGen(input.value, createdProject.id);
 
       return createdProject;
     }),

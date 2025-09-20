@@ -14,13 +14,20 @@ import {
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
-import { Fragment, MessageRole, MessageType } from "@/generated/prisma";
+import {
+  Fragment,
+  FragmentType,
+  Message,
+  MessageRole,
+  MessageType,
+} from "@/generated/prisma";
 import FragmentWeb from "../components/fragment-web";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Code2Icon, CrownIcon, EyeIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import FileExplorer from "@/components/FileExplorer";
+import DocView from "../components/doc-view";
 
 interface Props {
   projectId: string;
@@ -38,37 +45,7 @@ export const ProjectView = ({ projectId }: Props) => {
 
   const createMessage = useMutation(
     trpc.messages.create.mutationOptions({
-      onMutate: async (variables) => {
-        await queryClient.cancelQueries(
-          trpc.messages.getMany.queryOptions({ projectId })
-        );
-
-        const previousMessages = queryClient.getQueryData(
-          trpc.messages.getMany.queryOptions({ projectId }).queryKey
-        );
-
-        const optimisticUserMessage = {
-          id: `temp-${Date.now()}`,
-          role: MessageRole.USER,
-          content: variables.value,
-          createdAt: new Date(),
-          fragment: null,
-          type: MessageType.RESULT,
-          projectId: variables.projectId,
-        };
-
-        queryClient.setQueryData(
-          trpc.messages.getMany.queryOptions({ projectId }).queryKey,
-          (old: any) => [...(old || []), optimisticUserMessage]
-        );
-
-        return { previousMessages };
-      },
-      onError: (error, variables, context) => {
-        queryClient.setQueryData(
-          trpc.messages.getMany.queryOptions({ projectId }).queryKey,
-          context?.previousMessages
-        );
+      onError: (error) => {
         console.error("Error creating message:", error);
       },
       onSettled: () => {
@@ -85,9 +62,23 @@ export const ProjectView = ({ projectId }: Props) => {
     setActiveFragment(fragment);
   };
 
-  const handleCreateMessage = async (content: string) => {
+  const handleCreateMessage = async (msg: {
+    content: string;
+    role: MessageRole;
+    fragment?: {
+      type: FragmentType;
+      title: string;
+      files: Record<string, string>;
+    };
+  }) => {
     try {
-      await createMessage.mutateAsync({ value: content, projectId });
+      await createMessage.mutateAsync({
+        projectId,
+        content: msg.content,
+        role: msg.role,
+        type: "RESULT",
+        fragment: msg.fragment,
+      });
     } catch (error) {
       console.error("Message creation failed:", error);
     }
@@ -110,45 +101,51 @@ export const ProjectView = ({ projectId }: Props) => {
         <ResizableHandle className="w-1 bg-gray-200 hover:bg-gray-300 dark:bg-gray-950 dark:hover:bg-gray-700 transition-colors" />
         <ResizablePanel defaultSize={65} minSize={60} maxSize={80}>
           <Suspense fallback={<p>Loading...</p>}>
-            <Tabs
-              className="h-full gap-y-0"
-              defaultValue="preview"
-              value={tabState}
-              onValueChange={(value) =>
-                setTabState(value as "preview" | "code")
-              }
-            >
-              <div className="w-full flex items-center p-2 border-b gap-x-2">
-                <TabsList className="h-8 p-0 border rounded-md">
-                  <TabsTrigger value="preview" className="rounded-sm">
-                    <EyeIcon /> <span>Demo</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="code" className="rounded-sm">
-                    <Code2Icon /> <span>Code</span>
-                  </TabsTrigger>
-                </TabsList>
-                <div className="ml-auto flex items-center gap-x-2">
-                  <Button asChild size="sm" variant="default">
-                    <Link href="/pricing">
-                      <CrownIcon />
-                      Upgrade
-                    </Link>
-                  </Button>
+            {activeFragment?.type === "DOC" ? (
+              <DocView
+                files={activeFragment.files as { [path: string]: string }}
+              />
+            ) : (
+              <Tabs
+                className="h-full gap-y-0"
+                defaultValue="preview"
+                value={tabState}
+                onValueChange={(value) =>
+                  setTabState(value as "preview" | "code")
+                }
+              >
+                <div className="w-full flex items-center p-2 border-b gap-x-2">
+                  <TabsList className="h-8 p-0 border rounded-md">
+                    <TabsTrigger value="preview" className="rounded-sm">
+                      <EyeIcon /> <span>Demo</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="code" className="rounded-sm">
+                      <Code2Icon /> <span>Code</span>
+                    </TabsTrigger>
+                  </TabsList>
+                  <div className="ml-auto flex items-center gap-x-2">
+                    <Button asChild size="sm" variant="default">
+                      <Link href="/pricing">
+                        <CrownIcon />
+                        Upgrade
+                      </Link>
+                    </Button>
+                  </div>
                 </div>
-              </div>
-              <TabsContent value="preview">
-                {!!activeFragment && (
-                  <FragmentWeb activeFragment={activeFragment} />
-                )}
-              </TabsContent>
-              <TabsContent value="code">
-                {!!activeFragment && (
-                  <FileExplorer
-                    files={activeFragment.files as { [path: string]: string }}
-                  />
-                )}
-              </TabsContent>
-            </Tabs>
+                <TabsContent value="preview">
+                  {!!activeFragment && (
+                    <FragmentWeb activeFragment={activeFragment} />
+                  )}
+                </TabsContent>
+                <TabsContent value="code">
+                  {!!activeFragment && (
+                    <FileExplorer
+                      files={activeFragment.files as { [path: string]: string }}
+                    />
+                  )}
+                </TabsContent>
+              </Tabs>
+            )}
           </Suspense>
         </ResizablePanel>
       </ResizablePanelGroup>

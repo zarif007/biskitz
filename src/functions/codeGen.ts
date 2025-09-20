@@ -3,7 +3,7 @@ import { generateText, stepCountIs, tool } from "ai";
 import { z } from "zod";
 import { Sandbox } from "@e2b/code-interpreter";
 import { getSandbox } from "../inngest/utils";
-import { PROMPT } from "@/constents/systemPrompts/prompt";
+import { PROMPT } from "@/constants/systemPrompts/prompt";
 import prisma from "@/lib/db";
 
 interface CodeGenState {
@@ -31,7 +31,7 @@ const codeGen = async (
     sandboxId,
   };
   const terminalTool = tool({
-    description: "A terminal in a linux environment",
+    description: "A terminal in a unix environment",
     inputSchema: z.object({
       command: z.string().describe("The command to execute in the terminal"),
     }),
@@ -206,6 +206,7 @@ const codeGen = async (
         type: "RESULT",
         fragment: {
           create: {
+            type: "CODE",
             sandboxUrl: sandboxUrl as string,
             files: state.files,
             title: "Fragment",
