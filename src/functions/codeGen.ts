@@ -3,8 +3,7 @@ import { generateText, stepCountIs, tool } from "ai";
 import { z } from "zod";
 import { Sandbox } from "@e2b/code-interpreter";
 import { getSandbox } from "../inngest/utils";
-import { PROMPT } from "@/constants/systemPrompts/prompt";
-import prisma from "@/lib/db";
+import DEV_AGENT_PROMPT from "@/constants/systemPrompts/dev";
 
 interface CodeGenState {
   files: { [path: string]: string };
@@ -22,7 +21,6 @@ interface CodeGenResult {
 
 const codeGen = async (
   prompt: string,
-  projectId: string
 ): Promise<CodeGenResult> => {
   const sandbox = await Sandbox.create("demo-nextjs-test2");
   const sandboxId = sandbox.sandboxId;
@@ -126,8 +124,8 @@ const codeGen = async (
   while (iterations < maxIterations && !state.summary) {
     try {
       const result = await generateText({
-        model: openai("gpt-4.1-mini"),
-        system: PROMPT,
+        model: openai("gpt-4o-mini"),
+        system: DEV_AGENT_PROMPT,
         messages: conversationHistory,
         tools: {
           terminal: terminalTool,
@@ -186,34 +184,6 @@ const codeGen = async (
   } catch (e) {
     console.error("Error getting sandbox URL:", e);
     sandboxUrl = null;
-  }
-
-  if (isError) {
-    await prisma.message.create({
-      data: {
-        projectId,
-        content: "Something went wrong, please try again.",
-        role: "ASSISTANT",
-        type: "ERROR",
-      },
-    });
-  } else {
-    await prisma.message.create({
-      data: {
-        projectId,
-        content: state.summary || prompt,
-        role: "ASSISTANT",
-        type: "RESULT",
-        fragment: {
-          create: {
-            type: "CODE",
-            sandboxUrl: sandboxUrl as string,
-            files: state.files,
-            title: "Fragment",
-          },
-        },
-      },
-    });
   }
 
   const finalResult: CodeGenResult = {

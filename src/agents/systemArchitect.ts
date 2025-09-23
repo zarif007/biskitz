@@ -2,9 +2,9 @@
 
 import { generateText, stepCountIs, tool } from "ai";
 import { openai } from "@ai-sdk/openai";
-import BA_SYSTEM_PROMPT from "@/constants/systemPrompts/businessAnalyst";
+import SYS_ARCH_SYSTEM_PROMPT from "@/constants/systemPrompts/systemArchitect";
 
-const businessAnalyst = async (prompt: string) => {
+const systemArchitect = async (prompt: string) => {
   const conversationHistory: Array<{
     role: "user" | "assistant";
     content: string;
@@ -12,7 +12,7 @@ const businessAnalyst = async (prompt: string) => {
   try {
     const result = await generateText({
       model: openai("gpt-4o-mini"),
-      system: BA_SYSTEM_PROMPT,
+      system: SYS_ARCH_SYSTEM_PROMPT,
       messages: conversationHistory,
       stopWhen: stepCountIs(2),
     });
@@ -21,4 +21,4 @@ const businessAnalyst = async (prompt: string) => {
   } catch {}
 };
 
-export default businessAnalyst;
+export default systemArchitect;

@@ -11,19 +11,16 @@ const DocView = ({ files }: Props) => {
 
   const fileEntries = Object.entries(files);
 
-  // Set first file as default if available
   useEffect(() => {
-    if (fileEntries.length > 0 && !selectedFile) {
+    if (fileEntries.length > 0) {
       setSelectedFile(fileEntries[0][0]);
     }
-  }, [files, selectedFile, fileEntries]);
+  }, [files]);
 
-  // Enhanced markdown parser with Google Docs styling
   const parseMarkdown = (markdown: string) => {
     if (!markdown) return "";
 
     let html = markdown
-      // Headers
       .replace(
         /^### (.*$)/gim,
         '<h3 class="text-lg font-semibold mb-3 mt-6 text-gray-800 dark:text-gray-100">$1</h3>'
@@ -36,8 +33,6 @@ const DocView = ({ files }: Props) => {
         /^# (.*$)/gim,
         '<h1 class="text-2xl font-bold mb-6 mt-8 text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">$1</h1>'
       )
-
-      // Bold and italic
       .replace(
         /\*\*(.*?)\*\*/g,
         '<strong class="font-semibold text-gray-900 dark:text-white">$1</strong>'
@@ -46,8 +41,6 @@ const DocView = ({ files }: Props) => {
         /\*(.*?)\*/g,
         '<em class="italic text-gray-800 dark:text-gray-200">$1</em>'
       )
-
-      // Code blocks
       .replace(
         /```([\s\S]*?)```/g,
         '<div class="bg-gray-100 dark:bg-gray-950 rounded-lg p-4 my-4 overflow-x-auto"><code class="text-sm font-mono text-gray-800 dark:text-gray-200 whitespace-pre">$1</code></div>'
@@ -56,14 +49,10 @@ const DocView = ({ files }: Props) => {
         /`([^`]+)`/g,
         '<code class="bg-gray-100 dark:bg-gray-950 px-2 py-1 rounded text-sm font-mono text-gray-800 dark:text-gray-200">$1</code>'
       )
-
-      // Links
       .replace(
         /\[([^\]]+)\]\(([^)]+)\)/g,
         '<a href="$2" class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline transition-colors">$1</a>'
       )
-
-      // Lists
       .replace(
         /^\* (.*$)/gim,
         '<li class="ml-4 mb-1 text-gray-700 dark:text-gray-300">• $1</li>'
@@ -72,14 +61,10 @@ const DocView = ({ files }: Props) => {
         /^\d+\. (.*$)/gim,
         '<li class="ml-4 mb-1 text-gray-700 dark:text-gray-300 list-decimal">$1</li>'
       )
-
-      // Blockquotes
       .replace(
         /^> (.*$)/gim,
         '<blockquote class="border-l-4 border-blue-500 pl-4 py-2 my-4 bg-blue-50 dark:bg-blue-900/20 italic text-gray-700 dark:text-gray-300">$1</blockquote>'
       )
-
-      // Line breaks
       .replace(/\n/g, "<br />");
 
     return html;
@@ -122,12 +107,28 @@ const DocView = ({ files }: Props) => {
           </div>
         </aside>
 
-        {/* Main Content */}
-        <main className="flex-1 min-h-screen">
+        <main className="flex-1 min-h-screen relative">
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="absolute top-4 left-4 z-10 p-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            {sidebarOpen ? (
+              <ChevronLeft
+                size={16}
+                className="text-gray-600 dark:text-gray-400"
+              />
+            ) : (
+              <ChevronRight
+                size={16}
+                className="text-gray-600 dark:text-gray-400"
+              />
+            )}
+          </button>
+
           {selectedFile ? (
             <div className="max-w-4xl mx-auto">
               <div className="bg-white dark:bg-gray-950 min-h-screen">
-                <div className="px-8 py-8">
+                <div className="px-8 py-8 pt-16">
                   <div
                     className="prose prose-lg max-w-none leading-relaxed text-gray-700 dark:text-gray-300"
                     style={{
@@ -143,7 +144,6 @@ const DocView = ({ files }: Props) => {
               </div>
             </div>
           ) : (
-            // Empty state
             <div className="flex items-center justify-center h-96">
               <div className="text-center">
                 <FileText

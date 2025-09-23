@@ -99,22 +99,29 @@ export const ProjectView = ({ projectId }: Props) => {
           </Suspense>
         </ResizablePanel>
         <ResizableHandle className="w-1 bg-gray-200 hover:bg-gray-300 dark:bg-gray-950 dark:hover:bg-gray-700 transition-colors" />
-        <ResizablePanel defaultSize={65} minSize={60} maxSize={80}>
+        <ResizablePanel
+          defaultSize={65}
+          minSize={60}
+          maxSize={80}
+          className="flex flex-col"
+        >
           <Suspense fallback={<p>Loading...</p>}>
             {activeFragment?.type === "DOC" ? (
-              <DocView
-                files={activeFragment.files as { [path: string]: string }}
-              />
+              <div className="h-full overflow-auto">
+                <DocView
+                  files={activeFragment.files as { [path: string]: string }}
+                />
+              </div>
             ) : (
               <Tabs
-                className="h-full gap-y-0"
+                className="h-full flex flex-col"
                 defaultValue="preview"
                 value={tabState}
                 onValueChange={(value) =>
                   setTabState(value as "preview" | "code")
                 }
               >
-                <div className="w-full flex items-center p-2 border-b gap-x-2">
+                <div className="flex-shrink-0 w-full flex items-center p-2 border-b gap-x-2">
                   <TabsList className="h-8 p-0 border rounded-md">
                     <TabsTrigger value="preview" className="rounded-sm">
                       <EyeIcon /> <span>Demo</span>
@@ -132,18 +139,29 @@ export const ProjectView = ({ projectId }: Props) => {
                     </Button>
                   </div>
                 </div>
-                <TabsContent value="preview">
-                  {!!activeFragment && (
-                    <FragmentWeb activeFragment={activeFragment} />
-                  )}
-                </TabsContent>
-                <TabsContent value="code">
-                  {!!activeFragment && (
-                    <FileExplorer
-                      files={activeFragment.files as { [path: string]: string }}
-                    />
-                  )}
-                </TabsContent>
+
+                <div className="flex-1 min-h-0">
+                  <TabsContent
+                    value="preview"
+                    className="h-full m-0 overflow-auto"
+                  >
+                    {!!activeFragment && (
+                      <FragmentWeb activeFragment={activeFragment} />
+                    )}
+                  </TabsContent>
+                  <TabsContent
+                    value="code"
+                    className="h-full m-0 overflow-auto"
+                  >
+                    {!!activeFragment && (
+                      <FileExplorer
+                        files={
+                          activeFragment.files as { [path: string]: string }
+                        }
+                      />
+                    )}
+                  </TabsContent>
+                </div>
               </Tabs>
             )}
           </Suspense>

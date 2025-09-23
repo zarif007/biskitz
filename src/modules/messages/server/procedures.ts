@@ -36,7 +36,7 @@ export const messageRouter = createTRPCRouter({
       z.object({
         content: z
           .string()
-          .min(1, "Message cannot be empty")
+          .min(0)
           .max(5000, "Message is too long"),
         projectId: z.string().min(1, "Project ID is required"),
         role: z.nativeEnum(MessageRole),
