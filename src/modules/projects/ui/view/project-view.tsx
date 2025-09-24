@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import FileExplorer from "@/components/FileExplorer";
 import DocView from "../components/doc-view";
+import WebContainerRunner from "@/components/WebContainerRunner";
 
 interface Props {
   projectId: string;
@@ -154,6 +155,11 @@ export const ProjectView = ({ projectId }: Props) => {
                     className="h-full m-0 overflow-auto"
                   >
                     {!!activeFragment && (
+                      // <WebContainerRunner
+                      //   files={
+                      //     activeFragment.files as { [path: string]: string }
+                      //   }
+                      // />
                       <FileExplorer
                         files={
                           activeFragment.files as { [path: string]: string }

@@ -11,7 +11,7 @@ const systemArchitect = async (prompt: string) => {
   }> = [{ role: "user", content: prompt.trim() }];
   try {
     const result = await generateText({
-      model: openai("gpt-4o-mini"),
+      model: openai("gpt-4.1-mini"),
       system: SYS_ARCH_SYSTEM_PROMPT,
       messages: conversationHistory,
       stopWhen: stepCountIs(2),

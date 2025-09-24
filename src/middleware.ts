@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import authConfig from "./auth.config";
 import NextAuth from "next-auth";
 
@@ -9,5 +9,12 @@ import NextAuth from "next-auth";
 // 2. Wrapped middleware option
 const { auth } = NextAuth(authConfig);
 export default auth(async function middleware(req: NextRequest) {
-  // Your custom middleware logic goes here
+  const res = NextResponse.next();
+  res.headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  res.headers.set("Cross-Origin-Embedder-Policy", "require-corp");
+  return res;
 });
+
+export const config = {
+  matcher: "/:path*",
+};

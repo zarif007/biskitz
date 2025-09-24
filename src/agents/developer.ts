@@ -55,7 +55,7 @@ const developer = async (prompt: string) => {
     
   try {
     const result = await generateText({
-      model: openai("gpt-4.1-mini-2025-04-14"),
+      model: openai("gpt-4.1-mini"),
       system: DEV_AGENT_PROMPT,
       messages: conversationHistory,
       tools: {

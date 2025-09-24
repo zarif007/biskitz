@@ -11,7 +11,7 @@ const businessAnalyst = async (prompt: string) => {
   }> = [{ role: "user", content: prompt.trim() }];
   try {
     const result = await generateText({
-      model: openai("gpt-4o-mini"),
+      model: openai("gpt-4.1-mini"),
       system: BA_SYSTEM_PROMPT,
       messages: conversationHistory,
       stopWhen: stepCountIs(2),
