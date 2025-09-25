@@ -2,33 +2,23 @@
 
 import { generateText, stepCountIs, tool } from 'ai'
 import { openai } from '@ai-sdk/openai'
-import DEV_AGENT_PROMPT from '@/constants/systemPrompts/dev'
 import { z } from 'zod'
+import TESTER_AGENT_PROMPT from '@/constants/systemPrompts/tester'
 
 interface CodeGenState {
   files: { [path: string]: string }
   summary?: string
 }
 
-const developer = async (
-  prompt: string,
-  currentFolder: { [path: string]: string }
-) => {
-  const state: CodeGenState = {
-    files: {},
-  }
-
+const tester = async (prompt: string) => {
   const conversationHistory: Array<{
     role: 'user' | 'assistant'
     content: string
-  }> = [
-    {
-      role: 'user',
-      content: `This is the requirement fro the system architect \n ${prompt.trim()} and this is the current test file \n ${JSON.stringify(
-        currentFolder
-      )}`,
-    },
-  ]
+  }> = [{ role: 'user', content: prompt.trim() }]
+
+  const state: CodeGenState = {
+    files: {},
+  }
 
   // ---- Tools ----
   const createOrUpdateFilesTool = tool({
@@ -67,7 +57,7 @@ const developer = async (
   try {
     const result = await generateText({
       model: openai('gpt-4.1-mini'),
-      system: DEV_AGENT_PROMPT,
+      system: TESTER_AGENT_PROMPT,
       messages: conversationHistory,
       tools: {
         createOrUpdateFiles: createOrUpdateFilesTool,
@@ -80,4 +70,4 @@ const developer = async (
   } catch {}
 }
 
-export default developer
+export default tester

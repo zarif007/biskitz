@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import React, { useEffect, useRef, useState } from 'react'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Card } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import {
   MessageCircle,
   Clock,
@@ -12,47 +12,48 @@ import {
   ChevronDown,
   ChevronUp,
   ArrowLeft,
-} from "lucide-react";
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
+} from 'lucide-react'
+import { Textarea } from '@/components/ui/textarea'
+import { Button } from '@/components/ui/button'
 import {
   Fragment,
   FragmentType,
   MessageRole,
   MessageType,
-} from "@/generated/prisma";
-import MessageLoader from "./message-loader";
-import { useSession } from "next-auth/react";
-import businessAnalyst from "@/agents/businessAnalyst";
-import AssistantAvatar from "./assistant-avatar";
-import systemArchitect from "@/agents/systemArchitect";
-import Link from "next/link";
-import developer from "@/agents/developer";
+} from '@/generated/prisma'
+import MessageLoader from './message-loader'
+import { useSession } from 'next-auth/react'
+import businessAnalyst from '@/agents/businessAnalyst'
+import AssistantAvatar from './assistant-avatar'
+import systemArchitect from '@/agents/systemArchitect'
+import Link from 'next/link'
+import developer from '@/agents/developer'
+import tester from '@/agents/tester'
 
 interface Message {
-  role: MessageRole;
-  content: string;
-  createdAt: Date;
-  fragment: Fragment | null;
-  type: MessageType;
-  id?: string;
+  role: MessageRole
+  content: string
+  createdAt: Date
+  fragment: Fragment | null
+  type: MessageType
+  id?: string
 }
 
 interface Props {
-  messages: Message[];
-  isMessageCreationPending: boolean;
+  messages: Message[]
+  isMessageCreationPending: boolean
   onCreateMessage: (msg: {
-    content: string;
-    role: MessageRole;
+    content: string
+    role: MessageRole
     fragment?: {
-      type: FragmentType;
-      title: string;
-      files: Record<string, string>;
-    };
-  }) => void;
-  activeFragment: Fragment | null;
-  onFragmentClicked: (fragment: Fragment | null) => void;
-  headerTitle?: string;
+      type: FragmentType
+      title: string
+      files: Record<string, string>
+    }
+  }) => void
+  activeFragment: Fragment | null
+  onFragmentClicked: (fragment: Fragment | null) => void
+  headerTitle?: string
 }
 
 const MessageContainer = ({
@@ -61,138 +62,173 @@ const MessageContainer = ({
   onFragmentClicked,
   isMessageCreationPending,
   onCreateMessage,
-  headerTitle = "Conversation",
+  headerTitle = 'Conversation',
 }: Props) => {
-  const { data: session } = useSession();
-  const bottomRef = useRef<HTMLDivElement | null>(null);
-  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
-  const [inputValue, setInputValue] = useState("");
-  const [nextFrom, setNextFrom] = useState<MessageRole>("BUSINESS_ANALYST");
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const { data: session } = useSession()
+  const bottomRef = useRef<HTMLDivElement | null>(null)
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null)
+  const [inputValue, setInputValue] = useState('')
+  const [nextFrom, setNextFrom] = useState<MessageRole>('BUSINESS_ANALYST')
+  const [isProcessing, setIsProcessing] = useState<boolean>(false)
   const [expandedFragmentIdx, setExpandedFragmentIdx] = useState<number | null>(
     null
-  );
-  const hasProcessedInitialMessage = useRef(false);
+  )
+  const [currentFiles, setCurrentFile] = useState<{ [path: string]: string }>(
+    {}
+  )
+  const hasProcessedInitialMessage = useRef(false)
 
   useEffect(() => {
     if (scrollAreaRef.current) {
-      const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
+      const scrollContainer = scrollAreaRef.current.querySelector(
+        '[data-radix-scroll-area-viewport]'
+      )
       if (scrollContainer) {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+        scrollContainer.scrollTop = scrollContainer.scrollHeight
       }
     }
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages.length])
 
   useEffect(() => {
     const lastAssistantMessage = messages.findLast(
       (m) => m.role !== MessageRole.USER
-    );
+    )
 
     if (lastAssistantMessage?.fragment) {
-      onFragmentClicked(lastAssistantMessage.fragment);
+      onFragmentClicked(lastAssistantMessage.fragment)
     }
-  }, [messages]);
+  }, [messages])
 
   useEffect(() => {
-    if (hasProcessedInitialMessage.current) return;
+    if (hasProcessedInitialMessage.current) return
 
-    const lastMessage = messages[messages.length - 1];
+    const lastMessage = messages[messages.length - 1]
     if (lastMessage?.role === MessageRole.USER) {
-      handleBusinessAnalyst(lastMessage.content);
-      hasProcessedInitialMessage.current = true;
+      handleBusinessAnalyst(lastMessage.content)
+      hasProcessedInitialMessage.current = true
     } else if (lastMessage?.role === MessageRole.BUSINESS_ANALYST) {
-      handleSystemArchitect(lastMessage.content);
-      hasProcessedInitialMessage.current = true;
+      handleSystemArchitect(lastMessage.content)
+      hasProcessedInitialMessage.current = true
     } else if (lastMessage?.role === MessageRole.SYSTEM_ARCHITECT) {
-      handleDev(lastMessage.content);
-      hasProcessedInitialMessage.current = true;
+      handleTester(lastMessage.content)
+      hasProcessedInitialMessage.current = true
+    } else if (lastMessage?.role === MessageRole.TESTER) {
+      handleDev(lastMessage.content, currentFiles)
+      hasProcessedInitialMessage.current = true
     }
-  }, []);
+  }, [])
 
   const handleBusinessAnalyst = async (prompt: string) => {
     try {
-      setIsProcessing(true);
-      setNextFrom(MessageRole.BUSINESS_ANALYST);
-      const businessAnalystRes = await businessAnalyst(prompt);
+      setIsProcessing(true)
+      setNextFrom(MessageRole.BUSINESS_ANALYST)
+      const businessAnalystRes = await businessAnalyst(prompt)
       onCreateMessage({
-        content: "",
+        content: '',
         role: MessageRole.BUSINESS_ANALYST,
         fragment: {
           type: FragmentType.DOC,
-          files: { ["Analysis Report"]: businessAnalystRes ?? "" },
-          title: "Analysis Report",
+          files: { ['Analysis Report']: businessAnalystRes ?? '' },
+          title: 'Analysis Report',
         },
-      });
-      if (businessAnalystRes) await handleSystemArchitect(businessAnalystRes);
+      })
+      if (businessAnalystRes) await handleSystemArchitect(businessAnalystRes)
     } catch (e) {
-      console.error("Error generating code:", e);
+      console.error('Error generating code:', e)
     } finally {
-      setIsProcessing(false);
+      setIsProcessing(false)
     }
-  };
+  }
 
   const handleSystemArchitect = async (prompt: string) => {
     try {
-      setIsProcessing(true);
-      setNextFrom(MessageRole.SYSTEM_ARCHITECT);
-      const systemArchitectRes = await systemArchitect(prompt);
+      setIsProcessing(true)
+      setNextFrom(MessageRole.SYSTEM_ARCHITECT)
+      const systemArchitectRes = await systemArchitect(prompt)
       onCreateMessage({
-        content: "",
+        content: '',
         role: MessageRole.SYSTEM_ARCHITECT,
         fragment: {
           type: FragmentType.DOC,
-          files: { ["System Architecture"]: systemArchitectRes ?? "" },
-          title: "System Architecture",
+          files: { ['System Architecture']: systemArchitectRes ?? '' },
+          title: 'System Architecture',
         },
-      });
-      if (systemArchitectRes) await handleDev(systemArchitectRes);
+      })
+      if (systemArchitectRes) await handleTester(systemArchitectRes)
     } catch (e) {
-      console.error("Error generating code:", e);
+      console.error('Error generating code:', e)
     } finally {
-      setIsProcessing(false);
+      setIsProcessing(false)
     }
-  };
+  }
 
-  const handleDev = async (prompt: string) => {
+  const handleTester = async (prompt: string) => {
     try {
-      setIsProcessing(true);
-      setNextFrom(MessageRole.DEVELOPER);
-      const devRes = await developer(prompt);
+      setIsProcessing(true)
+      setNextFrom(MessageRole.TESTER)
+      const testerRes = await tester(prompt)
       onCreateMessage({
-        content: "",
+        content: '',
+        role: MessageRole.TESTER,
+        fragment: {
+          type: FragmentType.CODE,
+          files: testerRes?.state.files ?? {},
+          title: 'Code',
+        },
+      })
+      setCurrentFile(() => testerRes?.state.files ?? {})
+      if (testerRes) await handleDev(prompt, testerRes?.state.files ?? {})
+    } catch (e) {
+      console.error('Error generating code:', e)
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const handleDev = async (
+    prompt: string,
+    files: { [path: string]: string }
+  ) => {
+    try {
+      setIsProcessing(true)
+      setNextFrom(MessageRole.DEVELOPER)
+      const devRes = await developer(prompt, files)
+
+      onCreateMessage({
+        content: '',
         role: MessageRole.DEVELOPER,
         fragment: {
           type: FragmentType.CODE,
-          files: devRes?.state.files ?? {},
-          title: "Code",
+          files: { ...(devRes?.state.files ?? {}), ...files },
+          title: 'Code',
         },
-      });
+      })
     } catch (e) {
-      console.error("Error generating code:", e);
+      console.error('Error generating code:', e)
     } finally {
-      setIsProcessing(false);
+      setIsProcessing(false)
     }
-  };
+  }
 
   const handleSend = () => {
-    if (!inputValue) return;
+    if (!inputValue) return
 
-    const messageContent = inputValue;
-    setInputValue("");
+    const messageContent = inputValue
+    setInputValue('')
     onCreateMessage({
       content: messageContent,
       role: MessageRole.USER,
-    });
-    handleBusinessAnalyst(messageContent);
-  };
+    })
+    handleBusinessAnalyst(messageContent)
+  }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
     }
-  };
+  }
 
   return (
     <div className="h-full flex flex-col border-r bg-white dark:bg-gray-950">
@@ -237,21 +273,21 @@ const MessageContainer = ({
               </div>
             ) : (
               messages.map((message, index) => {
-                const isAssistant = message.role !== MessageRole.USER;
+                const isAssistant = message.role !== MessageRole.USER
 
                 return (
                   <div
                     key={message.id || index}
                     className={`flex gap-3 ${
-                      isAssistant ? "flex-row" : "flex-row-reverse"
+                      isAssistant ? 'flex-row' : 'flex-row-reverse'
                     }`}
                   >
                     <div className="flex-shrink-0">
                       <div
                         className={`w-8 h-8 rounded-full flex items-center justify-center ${
                           isAssistant
-                            ? "bg-gray-100 dark:bg-gray-900"
-                            : "bg-gray-950 dark:bg-gray-100"
+                            ? 'bg-gray-100 dark:bg-gray-900'
+                            : 'bg-gray-950 dark:bg-gray-100'
                         }`}
                       >
                         {isAssistant ? (
@@ -259,7 +295,7 @@ const MessageContainer = ({
                         ) : session?.user?.image ? (
                           <img
                             src={session.user.image}
-                            alt={session.user.name || "User"}
+                            alt={session.user.name || 'User'}
                             className="w-8 h-8 rounded-full object-cover"
                           />
                         ) : (
@@ -271,47 +307,50 @@ const MessageContainer = ({
                       <Card
                         className={`p-3 shadow-sm ${
                           isAssistant
-                            ? "bg-gray-50 dark:bg-gray-950 border-gray-200 dark:border-gray-700"
-                            : "bg-gray-950 dark:bg-gray-100 border-gray-950 dark:border-gray-100"
+                            ? 'bg-gray-50 dark:bg-gray-950 border-gray-200 dark:border-gray-700'
+                            : 'bg-gray-950 dark:bg-gray-100 border-gray-950 dark:border-gray-100'
                         }`}
                       >
-                        {message.content && <p
-                          className={`text-sm leading-relaxed ${
-                            isAssistant
-                              ? "text-gray-950 dark:text-gray-100"
-                              : "text-white dark:text-gray-950"
-                          }`}
-                        >
-                          {message.content}
-                        </p>}
+                        {message.content && (
+                          <p
+                            className={`text-sm leading-relaxed ${
+                              isAssistant
+                                ? 'text-gray-950 dark:text-gray-100'
+                                : 'text-white dark:text-gray-950'
+                            }`}
+                          >
+                            {message.content}
+                          </p>
+                        )}
                         {message.fragment && (
                           <div
                             className={`p-2 rounded-sm bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 ${
                               activeFragment &&
                               message.fragment.id === activeFragment.id
-                                ? "ring-2 ring-blue-500"
-                                : ""
+                                ? 'ring-2 ring-blue-500'
+                                : ''
                             }`}
                           >
                             <div
                               className="flex items-center justify-between cursor-pointer"
                               onClick={() => {
                                 if (message.fragment) {
-                                  onFragmentClicked(message.fragment);
+                                  onFragmentClicked(message.fragment)
                                 }
                               }}
                             >
                               <div className="flex items-center gap-1 text-xs font-semibold text-gray-700 dark:text-gray-300">
-                                <Code2 className="w-4 h-4 mr-1" />{message.fragment.title}
+                                <Code2 className="w-4 h-4 mr-1" />
+                                {message.fragment.title}
                               </div>
                               <button
                                 type="button"
                                 className="ml-2 p-1 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-700"
                                 onClick={(event) => {
-                                  event.stopPropagation();
+                                  event.stopPropagation()
                                   setExpandedFragmentIdx(
                                     expandedFragmentIdx === index ? null : index
-                                  );
+                                  )
                                 }}
                               >
                                 {expandedFragmentIdx === index ? (
@@ -333,7 +372,9 @@ const MessageContainer = ({
                                       >
                                     ).map(([file]) => (
                                       <li key={file} className="break-all">
-                                        <span className="font-mono">{file}</span>
+                                        <span className="font-mono">
+                                          {file}
+                                        </span>
                                       </li>
                                     ))}
                                   </ul>
@@ -344,20 +385,20 @@ const MessageContainer = ({
                       </Card>
                       <div
                         className={`flex items-center gap-1 mt-1 text-xs text-gray-500 dark:text-gray-400 ${
-                          isAssistant ? "justify-start" : "justify-end"
+                          isAssistant ? 'justify-start' : 'justify-end'
                         }`}
                       >
                         <Clock className="w-3 h-3" />
                         <span>
                           {new Date(message.createdAt).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
+                            hour: '2-digit',
+                            minute: '2-digit',
                           })}
                         </span>
                       </div>
                     </div>
                   </div>
-                );
+                )
               })
             )}
             {isProcessing && <MessageLoader type={nextFrom} />}
@@ -414,7 +455,7 @@ const MessageContainer = ({
         </div>
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default MessageContainer;
+export default MessageContainer

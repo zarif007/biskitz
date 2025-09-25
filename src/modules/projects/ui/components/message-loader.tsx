@@ -1,74 +1,78 @@
-import { MessageRole } from "@/generated/prisma";
-import Image from "next/image";
-import React, { useEffect, useState } from "react";
+import { MessageRole } from '@/generated/prisma'
+import React, { useEffect, useState } from 'react'
 
 const MessageLoader = ({ type }: { type: MessageRole }) => {
-  const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
+  const [currentMessageIndex, setCurrentMessageIndex] = useState(0)
 
-  const roleImageMap: Record<MessageRole, string> = {
-    USER: "/agents/gradient/user.png",
-    ASSISTANT: "/agents/gradient/assistant.png",
-    SYSTEM: "/agents/gradient/system.png",
-    BUSINESS_ANALYST: "/agents/gradient/ba.png",
-    SYSTEM_ARCHITECT: "/agents/gradient/sys_arch.png",
-    DEVELOPER: "/agents/gradient/dev.png",
-    TESTER: "/agents/gradient/tester.png",
-    SECURITY_ANALYST: "/agents/gradient/security.png",
-    DEV_OPS: "/agents/gradient/devops.png",
-  };
+  const roleColorMap: Record<MessageRole, string> = {
+    USER: 'bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600',
+    ASSISTANT: 'bg-gradient-to-br from-violet-500 via-purple-500 to-pink-500',
+    SYSTEM: 'bg-gradient-to-br from-slate-500 via-gray-600 to-zinc-700',
+    BUSINESS_ANALYST:
+      'bg-gradient-to-br from-emerald-400 via-teal-500 to-cyan-600',
+    SYSTEM_ARCHITECT:
+      'bg-gradient-to-br from-indigo-500 via-blue-600 to-purple-700',
+    DEVELOPER: 'bg-gradient-to-br from-orange-400 via-red-500 to-pink-600',
+    TESTER: 'bg-gradient-to-br from-rose-400 via-pink-500 to-purple-600',
+    SECURITY_ANALYST:
+      'bg-gradient-to-br from-amber-400 via-orange-500 to-red-600',
+    DEV_OPS: 'bg-gradient-to-br from-teal-400 via-green-500 to-emerald-600',
+  }
 
   const roleMessages: Record<MessageRole, string[]> = {
-    USER: ["Processing input", "Understanding request"],
-    ASSISTANT: ["Generating response", "Processing query"],
-    SYSTEM: ["Initializing system", "Configuring settings"],
+    USER: ['Processing input', 'Understanding request'],
+    ASSISTANT: ['Generating response', 'Processing query'],
+    SYSTEM: ['Initializing system', 'Configuring settings'],
     BUSINESS_ANALYST: [
-      "Analyzing request",
-      "Writing docs",
-      "Gathering requirements",
+      'Analyzing request',
+      'Writing docs',
+      'Gathering requirements',
     ],
     SYSTEM_ARCHITECT: [
-      "Designing architecture",
-      "Planning system",
-      "Optimizing structure",
+      'Designing architecture',
+      'Planning system',
+      'Optimizing structure',
     ],
-    DEVELOPER: ["Writing code", "Debugging logic", "Building features"],
-    TESTER: ["Running tests", "Validating functionality", "Ensuring quality"],
+    DEVELOPER: ['Writing code', 'Debugging logic', 'Building features'],
+    TESTER: ['Running tests', 'Validating functionality', 'Ensuring quality'],
     SECURITY_ANALYST: [
-      "Scanning for vulnerabilities",
-      "Securing system",
-      "Analyzing threats",
+      'Scanning for vulnerabilities',
+      'Securing system',
+      'Analyzing threats',
     ],
     DEV_OPS: [
-      "Deploying updates",
-      "Monitoring systems",
-      "Configuring pipelines",
+      'Deploying updates',
+      'Monitoring systems',
+      'Configuring pipelines',
     ],
-  };
+  }
 
-  const messages = roleMessages[type] || ["Processing..."];
-  const imageSrc = roleImageMap[type] || "/agents/assistant.png";
+  const messages = roleMessages[type] || ['Processing...']
+  const gradientClass =
+    roleColorMap[type] ||
+    'bg-gradient-to-br from-violet-500 via-purple-500 to-pink-500'
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentMessageIndex((prev) => (prev + 1) % messages.length);
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [messages.length]);
+      setCurrentMessageIndex((prev) => (prev + 1) % messages.length)
+    }, 2000)
+    return () => clearInterval(interval)
+  }, [messages.length])
 
   return (
     <div className="flex flex-col items-center justify-center w-full h-full">
-      <Image
-        src={imageSrc}
-        alt={`${type} loader`}
-        width={72}
-        height={72}
-        className="object-cover"
+      <div
+        className={`w-18 h-18 rounded-full ${gradientClass} shadow-lg animate-spin`}
+        style={{
+          animation: 'spin 2s linear infinite, 1.5s ease-in-out infinite',
+        }}
       />
-      <div className="text-gray-600 dark:text-gray-400 text-md animate-pulse mt-1">
+
+      <div className="text-gray-600 dark:text-gray-400 text-md animate-pulse mt-4">
         {messages[currentMessageIndex]}
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default MessageLoader;
+export default MessageLoader

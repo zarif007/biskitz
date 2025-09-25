@@ -1,29 +1,24 @@
 import { MessageRole } from "@/generated/prisma";
-import Image from "next/image";
 import React from "react";
 
 const AssistantAvatar = ({ type }: { type: MessageRole }) => {
-  const roleImageMap: Record<MessageRole, string> = {
-    USER: "/agents/gradient/user.png",
-    ASSISTANT: "/agents/gradient/assistant.png",
-    SYSTEM: "/agents/gradient/system.png",
-    BUSINESS_ANALYST: "/agents/gradient/ba.png",
-    SYSTEM_ARCHITECT: "/agents/gradient/sys_arch.png",
-    DEVELOPER: "/agents/gradient/dev.png",
-    TESTER: "/agents/gradient/tester.png",
-    SECURITY_ANALYST: "/agents/gradient/security.png",
-    DEV_OPS: "/agents/gradient/devops.png",
+  const roleColorMap: Record<MessageRole, string> = {
+    USER: "bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600",
+    ASSISTANT: "bg-gradient-to-br from-violet-500 via-purple-500 to-pink-500",
+    SYSTEM: "bg-gradient-to-br from-slate-500 via-gray-600 to-zinc-700",
+    BUSINESS_ANALYST: "bg-gradient-to-br from-emerald-400 via-teal-500 to-cyan-600",
+    SYSTEM_ARCHITECT: "bg-gradient-to-br from-indigo-500 via-blue-600 to-purple-700",
+    DEVELOPER: "bg-gradient-to-br from-orange-400 via-red-500 to-pink-600",
+    TESTER: "bg-gradient-to-br from-rose-400 via-pink-500 to-purple-600",
+    SECURITY_ANALYST: "bg-gradient-to-br from-amber-400 via-orange-500 to-red-600",
+    DEV_OPS: "bg-gradient-to-br from-teal-400 via-green-500 to-emerald-600",
   };
 
-  const imageSrc = roleImageMap[type] || "/agents/assistant.png";
+  const gradientClass = roleColorMap[type] || "bg-gradient-to-br from-violet-500 via-purple-500 to-pink-500";
 
   return (
-    <Image
-      src={imageSrc}
-      alt={`${type} avatar`}
-      width={32}
-      height={32}
-      className="object-cover"
+    <div
+      className={`w-8 h-8 rounded-full ${gradientClass} shadow-lg`}
     />
   );
 };

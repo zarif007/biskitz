@@ -29,6 +29,7 @@
     "@trpc/tanstack-react-query": "^11.5.0",
     "@webcontainer/api": "^1.6.1",
     "ai": "^5.0.33",
+    "ansi-to-html": "^0.7.2",
     "class-variance-authority": "^0.7.1",
     "client-only": "^0.0.1",
     "clsx": "^2.1.1",

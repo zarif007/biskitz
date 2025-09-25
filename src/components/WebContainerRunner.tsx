@@ -1,400 +1,333 @@
-'use client';
-
-import { useEffect, useRef, useState } from 'react';
-import { WebContainer, FileSystemTree } from '@webcontainer/api';
-
-interface FileCollection {
-  [path: string]: string;
-}
+import React, { useEffect, useState, useRef } from 'react'
+import { Square, Maximize2, Minimize2 } from 'lucide-react'
+import { FileSystemTree, WebContainer } from '@webcontainer/api'
+import {
+  ResizablePanel,
+  ResizableHandle,
+  ResizablePanelGroup,
+} from '@/components/ui/resizable'
+import FileExplorer from './FileExplorer'
+import AnsiToHtml from 'ansi-to-html'
 
 interface Props {
-  files: FileCollection;
+  files: { [path: string]: string }
 }
 
-// Global WebContainer instance
-let globalWebContainer: WebContainer | null = null;
-let isBooting = false;
+const ansiConverter = new AnsiToHtml()
+let globalWebContainer: any = null
 
-export default function WebContainerRunner({ files }: Props) {
-  const [webcontainer, setWebcontainer] = useState<WebContainer | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [output, setOutput] = useState<string>('');
-  const [isRunning, setIsRunning] = useState(false);
-  const [error, setError] = useState<string>('');
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const outputRef = useRef<HTMLDivElement>(null);
+const WebContainerRunner = ({ files }: Props) => {
+  const [webContainer, setWebContainer] = useState<any>(null)
+  const [terminalOutput, setTerminalOutput] = useState<string[]>([])
+  const [currentCommand, setCurrentCommand] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
+  const [isTerminalMaximized, setIsTerminalMaximized] = useState(false)
+  const [activeTerminalTab, setActiveTerminalTab] = useState('terminal')
+  const terminalRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
-  // Convert flat file structure to WebContainer's nested structure
-  const convertToFileSystemTree = (files: FileCollection): FileSystemTree => {
-    const tree: FileSystemTree = {};
-    
-    Object.entries(files).forEach(([path, contents]) => {
-      const parts = path.split('/').filter(part => part !== ''); // Remove empty parts
-      let current = tree;
-      
-      for (let i = 0; i < parts.length - 1; i++) {
-        const part = parts[i];
-        if (!current[part]) {
-          current[part] = {
-            directory: {}
-          };
-        }
-        
-        // Type guard to ensure we're working with a directory
-        if ('directory' in current[part]) {
-          current = current[part].directory!;
+  const convertToFileSystemTree = (files: {
+    [path: string]: string
+  }): FileSystemTree => {
+    const tree: FileSystemTree = {}
+    Object.entries(files).forEach(([path, content]) => {
+      const parts = path.split('/').filter(Boolean)
+      let current = tree
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i]
+        if (i === parts.length - 1) {
+          current[part] = { file: { contents: content } }
         } else {
-          throw new Error(`Conflicting file/directory at path: ${parts.slice(0, i + 1).join('/')}`);
-        }
-      }
-      
-      const fileName = parts[parts.length - 1];
-      current[fileName] = {
-        file: {
-          contents
-        }
-      };
-    });
-    
-    return tree;
-  };
-
-  // Initialize WebContainer
-  useEffect(() => {
-    let mounted = true;
-
-    const initWebContainer = async () => {
-      if (typeof window === 'undefined') {
-        console.log('Not in browser environment');
-        return;
-      }
-      
-      try {
-        console.log('Initializing WebContainer...');
-        
-        // If we already have a global instance, use it
-        if (globalWebContainer) {
-          console.log('Using existing WebContainer instance');
-          if (mounted) {
-            setWebcontainer(globalWebContainer);
-            setIsLoading(false);
+          if (!current[part]) current[part] = { directory: {} }
+          if ('directory' in current[part]) {
+            current = (current[part] as { directory: FileSystemTree }).directory
           }
-          return;
-        }
-
-        // If already booting, wait for it
-        if (isBooting) {
-          console.log('WebContainer is already booting, waiting...');
-          const checkInterval = setInterval(() => {
-            if (globalWebContainer && mounted) {
-              setWebcontainer(globalWebContainer);
-              setIsLoading(false);
-              clearInterval(checkInterval);
-            }
-          }, 100);
-          return;
-        }
-
-        // Boot new instance
-        isBooting = true;
-        console.log('Booting new WebContainer instance...');
-        
-        const container = await WebContainer.boot();
-        globalWebContainer = container;
-        isBooting = false;
-        
-        console.log('WebContainer booted successfully');
-        
-        if (mounted) {
-          setWebcontainer(container);
-          setIsLoading(false);
-        }
-      } catch (err) {
-        console.error('WebContainer initialization error:', err);
-        isBooting = false;
-        if (mounted) {
-          setError(`Failed to initialize WebContainer: ${err}`);
-          setIsLoading(false);
         }
       }
-    };
-
-    initWebContainer();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  // Mount files when webcontainer is ready or files change
-  useEffect(() => {
-    if (!webcontainer || !files || Object.keys(files).length === 0) {
-      console.log('Skipping file mount:', { hasContainer: !!webcontainer, hasFiles: Object.keys(files || {}).length > 0 });
-      return;
-    }
-
-    const mountFiles = async () => {
-      try {
-        console.log('Mounting files...');
-        setError('');
-        const fileSystemTree = convertToFileSystemTree(files);
-        console.log('FileSystemTree:', fileSystemTree);
-        await webcontainer.mount(fileSystemTree);
-        setOutput(prev => prev + '\n📁 Files mounted successfully');
-        console.log('Files mounted successfully');
-      } catch (err) {
-        console.error('File mounting error:', err);
-        setError(`Failed to mount files: ${err}`);
-      }
-    };
-
-    mountFiles();
-  }, [webcontainer, files]);
-
-  // Install dependencies
-  const installDependencies = async () => {
-    if (!webcontainer) {
-      setError('WebContainer not ready');
-      return;
-    }
-
-    try {
-      setIsRunning(true);
-      setError('');
-      setOutput(prev => prev + '\n📦 Installing dependencies...');
-
-      const installProcess = await webcontainer.spawn('npm', ['install']);
-      
-      installProcess.output.pipeTo(
-        new WritableStream({
-          write(data) {
-            setOutput(prev => prev + data);
-          },
-        })
-      );
-
-      const exitCode = await installProcess.exit;
-      if (exitCode !== 0) {
-        throw new Error(`Installation failed with exit code ${exitCode}`);
-      }
-
-      setOutput(prev => prev + '\n✅ Dependencies installed successfully');
-    } catch (err) {
-      console.error('Installation error:', err);
-      setError(`Installation failed: ${err}`);
-    } finally {
-      setIsRunning(false);
-    }
-  };
-
-  // Run the application
-  const runApplication = async () => {
-    if (!webcontainer) {
-      setError('WebContainer not ready');
-      return;
-    }
-
-    try {
-      setIsRunning(true);
-      setError('');
-      setOutput(prev => prev + '\n🚀 Starting application...');
-
-      const startProcess = await webcontainer.spawn('npm', ['start']);
-      
-      startProcess.output.pipeTo(
-        new WritableStream({
-          write(data) {
-            setOutput(prev => prev + data);
-          },
-        })
-      );
-
-      // Listen for server ready event
-      webcontainer.on('server-ready', (port, url) => {
-        if (iframeRef.current) {
-          iframeRef.current.src = url;
-        }
-        setOutput(prev => prev + `\n🌐 Server ready at ${url}`);
-      });
-
-    } catch (err) {
-      console.error('Application start error:', err);
-      setError(`Failed to start application: ${err}`);
-    } finally {
-      setIsRunning(false);
-    }
-  };
-
-  // Execute a specific command
-  const executeCommand = async (command: string, args: string[] = []) => {
-    if (!webcontainer) {
-      setError('WebContainer not ready');
-      return;
-    }
-
-    try {
-      setError('');
-      setOutput(prev => prev + `\n$ ${command} ${args.join(' ')}`);
-      
-      const process = await webcontainer.spawn(command, args);
-      
-      process.output.pipeTo(
-        new WritableStream({
-          write(data) {
-            setOutput(prev => prev + data);
-          },
-        })
-      );
-
-      const exitCode = await process.exit;
-      setOutput(prev => prev + `\nProcess exited with code ${exitCode}`);
-    } catch (err) {
-      console.error('Command execution error:', err);
-      setError(`Command execution failed: ${err}`);
-    }
-  };
-
-  // Clear output
-  const clearOutput = () => {
-    setOutput('');
-    setError('');
-  };
-
-  // Auto-scroll output
-  useEffect(() => {
-    if (outputRef.current) {
-      outputRef.current.scrollTop = outputRef.current.scrollHeight;
-    }
-  }, [output]);
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-        <span className="ml-3">Initializing WebContainer...</span>
-        <div className="ml-4 text-sm text-gray-500">
-          Check browser console for details
-        </div>
-      </div>
-    );
+    })
+    return tree
   }
 
-  if (error && !webcontainer) {
-    return (
-      <div className="p-8">
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          <strong>Initialization Error:</strong> {error}
-          <div className="mt-2 text-sm">
-            Make sure you're running in a supported browser and check the console for more details.
-          </div>
-        </div>
-      </div>
-    );
+  useEffect(() => {
+    const loadWebContainer = async () => {
+      try {
+        setTerminalOutput(['🚀 Booting WebContainer...'])
+
+        if (!globalWebContainer) {
+          globalWebContainer = await WebContainer.boot()
+        }
+
+        setWebContainer(globalWebContainer)
+        setTerminalOutput((prev) => [
+          ...prev,
+          '✅ WebContainer booted successfully',
+        ])
+
+        const fileSystemTree = convertToFileSystemTree(files)
+        await globalWebContainer.mount(fileSystemTree)
+        setTerminalOutput((prev) => [
+          ...prev,
+          '📁 Files mounted successfully',
+          '',
+        ])
+        setIsLoading(false)
+      } catch (error) {
+        setTerminalOutput((prev) => [...prev, `❌ Error: ${error}`])
+        setIsLoading(false)
+      }
+    }
+    loadWebContainer()
+  }, [files])
+
+  useEffect(() => {
+    if (terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight
+    }
+  }, [terminalOutput])
+
+  const runCommand = async (cmd: string, args: string[] = []) => {
+    if (!webContainer) return
+
+    try {
+      const process = await webContainer.spawn(cmd, args)
+
+      const reader = process.output.getReader()
+      const decoder = new TextDecoder()
+
+      let outputBuffer = ''
+
+      const readOutput = async () => {
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+
+            let text = ''
+            if (value instanceof Uint8Array) {
+              text = decoder.decode(value, { stream: true })
+            } else if (typeof value === 'string') {
+              text = value
+            } else {
+              text = String(value)
+            }
+
+            outputBuffer += text
+
+            if (text.includes('\n') || text.includes('\r')) {
+              const lines = outputBuffer.split(/\r?\n/)
+              outputBuffer = lines.pop() || ''
+
+              setTerminalOutput((prev) => {
+                const newOutput = [...prev]
+                if (lines.length > 0) {
+                  if (newOutput.length > 0) {
+                    newOutput[newOutput.length - 1] += lines[0]
+                    newOutput.push(...lines.slice(1))
+                  } else {
+                    newOutput.push(...lines)
+                  }
+                }
+                return newOutput
+              })
+            } else {
+              setTerminalOutput((prev) => {
+                const newOutput = [...prev]
+                if (newOutput.length > 0) {
+                  newOutput[newOutput.length - 1] += text
+                } else {
+                  newOutput.push(text)
+                }
+                return newOutput
+              })
+            }
+          }
+
+          if (outputBuffer) {
+            setTerminalOutput((prev) => {
+              const newOutput = [...prev]
+              if (newOutput.length > 0) {
+                newOutput[newOutput.length - 1] += outputBuffer
+              } else {
+                newOutput.push(outputBuffer)
+              }
+              return newOutput
+            })
+          }
+        } catch (error) {
+          console.error('Error reading output:', error)
+        }
+      }
+
+      readOutput()
+
+      const exitCode = await process.exit
+      if (exitCode !== 0) {
+        setTerminalOutput((prev) => [
+          ...prev,
+          `❌ Command exited with code ${exitCode}`,
+        ])
+      }
+    } catch (error) {
+      setTerminalOutput((prev) => [...prev, `❌ Command failed: ${error}`])
+    }
+  }
+
+  const executeCommand = async () => {
+    if (!currentCommand.trim()) return
+
+    const trimmedCommand = currentCommand.trim()
+    const [cmd, ...args] = trimmedCommand.split(' ')
+
+    setTerminalOutput((prev) => [...prev, `$ ${trimmedCommand}`, ''])
+    setCurrentCommand('')
+
+    await runCommand(cmd, args)
+
+    setTimeout(() => {
+      if (inputRef.current) inputRef.current.focus()
+    }, 100)
+  }
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      executeCommand()
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault()
+    }
+  }
+
+  const clearTerminal = () => {
+    setTerminalOutput([])
   }
 
   return (
-    <div className="w-full h-full flex flex-col bg-gray-50">
-      {/* Status Bar */}
-      <div className="bg-gray-800 text-white px-4 py-2 text-sm flex justify-between">
-        <span>WebContainer Status: {webcontainer ? '✅ Ready' : '❌ Not Ready'}</span>
-        <span>Files: {Object.keys(files).length}</span>
-      </div>
-
-      {/* Controls */}
-      <div className="bg-white border-b p-4 flex gap-2 flex-wrap">
-        <button
-          onClick={installDependencies}
-          disabled={!webcontainer || isRunning}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Install Dependencies
-        </button>
-        
-        <button
-          onClick={runApplication}
-          disabled={!webcontainer || isRunning}
-          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Run Application
-        </button>
-        
-        <button
-          onClick={() => executeCommand('npm', ['run', 'build'])}
-          disabled={!webcontainer || isRunning}
-          className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Build
-        </button>
-        
-        <button
-          onClick={clearOutput}
-          className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
-        >
-          Clear Output
-        </button>
-        
-        {isRunning && (
-          <div className="flex items-center ml-4">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-            <span className="ml-2 text-sm text-gray-600">Running...</span>
-          </div>
+    <div className="h-screen flex flex-col bg-white text-black dark:bg-gray-900 dark:text-white">
+      <ResizablePanelGroup
+        direction="vertical"
+        className="flex flex-col flex-1"
+      >
+        {!isTerminalMaximized && (
+          <ResizablePanel defaultSize={70}>
+            <div className="flex-1 bg-gray-100 dark:bg-gray-800 h-full">
+              <FileExplorer files={files} />
+            </div>
+          </ResizablePanel>
         )}
-      </div>
-
-      {/* Error Display */}
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 mb-4">
-          <strong>Error:</strong> {error}
-        </div>
-      )}
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex">
-        {/* Output Terminal */}
-        <div className="w-1/2 flex flex-col">
-          <div className="bg-gray-800 text-white p-2 text-sm font-semibold">
-            Output
-          </div>
-          <div
-            ref={outputRef}
-            className="flex-1 bg-black text-green-400 p-4 font-mono text-sm overflow-auto"
-            style={{ minHeight: '400px' }}
-          >
-            {output || 'Ready to run commands...'}
-          </div>
-        </div>
-
-        {/* Preview Area */}
-        <div className="w-1/2 flex flex-col border-l">
-          <div className="bg-gray-800 text-white p-2 text-sm font-semibold">
-            Preview
-          </div>
-          <div className="flex-1 bg-white">
-            <iframe
-              ref={iframeRef}
-              className="w-full h-full border-0"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-modals"
-              title="WebContainer Preview"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* File Explorer */}
-      <div className="border-t bg-white p-4">
-        <details>
-          <summary className="cursor-pointer font-semibold mb-2">
-            Files ({Object.keys(files).length})
-          </summary>
-          <div className="max-h-32 overflow-auto bg-gray-50 p-2 rounded text-sm">
-            {Object.keys(files).map(path => (
-              <div key={path} className="font-mono text-gray-600">
-                {path}
+        {!isTerminalMaximized && <ResizableHandle />}
+        <ResizablePanel
+          defaultSize={isTerminalMaximized ? 100 : 30}
+          minSize={20}
+        >
+          <div className="bg-gray-50 dark:bg-gray-900 border-t border-gray-300 dark:border-gray-800 flex flex-col h-full">
+            <div className="h-10 bg-gray-200 dark:bg-gray-950 flex items-center justify-between px-4 border-b border-gray-300 dark:border-gray-800">
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setActiveTerminalTab('terminal')}
+                  className={`px-3 py-1 text-sm rounded ${
+                    activeTerminalTab === 'terminal'
+                      ? 'bg-gray-300 dark:bg-gray-800 text-black dark:text-white'
+                      : 'text-gray-600 hover:text-black dark:text-gray-400 dark:hover:text-white'
+                  }`}
+                >
+                  Terminal
+                </button>
+                <button
+                  onClick={() => setActiveTerminalTab('problems')}
+                  className={`px-3 py-1 text-sm rounded ${
+                    activeTerminalTab === 'problems'
+                      ? 'bg-gray-300 dark:bg-gray-800 text-black dark:text-white'
+                      : 'text-gray-600 hover:text-black dark:text-gray-400 dark:hover:text-white'
+                  }`}
+                >
+                  Problems
+                </button>
+                <button
+                  onClick={() => setActiveTerminalTab('output')}
+                  className={`px-3 py-1 text-sm rounded ${
+                    activeTerminalTab === 'output'
+                      ? 'bg-gray-300 dark:bg-gray-800 text-black dark:text-white'
+                      : 'text-gray-600 hover:text-black dark:text-gray-400 dark:hover:text-white'
+                  }`}
+                >
+                  Output
+                </button>
               </div>
-            ))}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={clearTerminal}
+                  className="text-gray-600 hover:text-black dark:text-gray-400 dark:hover:text-white p-1 rounded"
+                  title="Clear Terminal"
+                >
+                  <Square className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setIsTerminalMaximized(!isTerminalMaximized)}
+                  className="text-gray-600 hover:text-black dark:text-gray-400 dark:hover:text-white p-1 rounded"
+                  title={
+                    isTerminalMaximized
+                      ? 'Restore Terminal'
+                      : 'Maximize Terminal'
+                  }
+                >
+                  {isTerminalMaximized ? (
+                    <Minimize2 className="w-4 h-4" />
+                  ) : (
+                    <Maximize2 className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+            {activeTerminalTab === 'terminal' && (
+              <div className="flex-1 flex flex-col min-h-0">
+                <div
+                  ref={terminalRef}
+                  className="flex-1 min-h-0 overflow-y-auto font-mono text-sm p-4 bg-gray-100 text-black dark:bg-gray-950 dark:text-gray-100"
+                >
+                  {terminalOutput.map((line, index) => (
+                    <div
+                      key={index}
+                      className="whitespace-pre-wrap leading-5"
+                      dangerouslySetInnerHTML={{
+                        __html: ansiConverter.toHtml(line || ''),
+                      }}
+                    />
+                  ))}
+                  {!isLoading && (
+                    <div className="flex items-center mt-2">
+                      <span className="text-green-600 dark:text-green-400 mr-2">
+                        $
+                      </span>
+                      <input
+                        ref={inputRef}
+                        type="text"
+                        value={currentCommand}
+                        onChange={(e) => setCurrentCommand(e.target.value)}
+                        onKeyDown={handleKeyPress}
+                        className="bg-transparent border-none outline-none flex-1 text-black dark:text-gray-100"
+                        autoFocus
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {activeTerminalTab === 'problems' && (
+              <div className="flex-1 p-4 text-gray-600 dark:text-gray-400">
+                <div className="text-center py-8">No problems detected</div>
+              </div>
+            )}
+            {activeTerminalTab === 'output' && (
+              <div className="flex-1 p-4 text-gray-600 dark:text-gray-400">
+                <div className="text-center py-8">No output to display</div>
+              </div>
+            )}
           </div>
-        </details>
-      </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
-  );
+  )
 }
+
+export default WebContainerRunner
