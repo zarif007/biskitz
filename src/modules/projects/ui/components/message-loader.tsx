@@ -20,31 +20,15 @@ const MessageLoader = ({ type }: { type: MessageRole }) => {
   }
 
   const roleMessages: Record<MessageRole, string[]> = {
-    USER: ['Processing input', 'Understanding request'],
-    ASSISTANT: ['Generating response', 'Processing query'],
-    SYSTEM: ['Initializing system', 'Configuring settings'],
-    BUSINESS_ANALYST: [
-      'Analyzing request',
-      'Writing docs',
-      'Gathering requirements',
-    ],
-    SYSTEM_ARCHITECT: [
-      'Designing architecture',
-      'Planning system',
-      'Optimizing structure',
-    ],
-    DEVELOPER: ['Writing code', 'Debugging logic', 'Building features'],
-    TESTER: ['Running tests', 'Validating functionality', 'Ensuring quality'],
-    SECURITY_ANALYST: [
-      'Scanning for vulnerabilities',
-      'Securing system',
-      'Analyzing threats',
-    ],
-    DEV_OPS: [
-      'Deploying updates',
-      'Monitoring systems',
-      'Configuring pipelines',
-    ],
+    USER: ['User is processing input'],
+    ASSISTANT: ['Assistant is generating response'],
+    SYSTEM: ['System is managing system'],
+    BUSINESS_ANALYST: ['Business Analyst is analyzing requirements'],
+    SYSTEM_ARCHITECT: ['System Architect is designing architecture'],
+    DEVELOPER: ['Developer is writing code'],
+    TESTER: ['Tester is writing testing functionality'],
+    SECURITY_ANALYST: ['Security Analyst is securing system'],
+    DEV_OPS: ['DevOps is deploying systems'],
   }
 
   const messages = roleMessages[type] || ['Processing...']
@@ -68,7 +52,7 @@ const MessageLoader = ({ type }: { type: MessageRole }) => {
         }}
       />
 
-      <div className="text-gray-600 dark:text-gray-400 text-md animate-pulse mt-4">
+      <div className="text-gray-600 dark:text-gray-400 text-sm animate-pulse mt-4">
         {messages[currentMessageIndex]}
       </div>
     </div>

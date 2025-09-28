@@ -78,6 +78,12 @@ const MessageContainer = ({
   )
   const hasProcessedInitialMessage = useRef(false)
 
+  // Collapsed messages state
+  const [collapsedIndexes, setCollapsedIndexes] = useState<Set<number>>(
+    new Set()
+  )
+
+  // Scroll to bottom on new messages
   useEffect(() => {
     if (scrollAreaRef.current) {
       const scrollContainer = scrollAreaRef.current.querySelector(
@@ -90,11 +96,31 @@ const MessageContainer = ({
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length])
 
+  // Auto-update collapsed indexes
+  useEffect(() => {
+    if (messages.length < 2) return
+
+    const lastAssistantIdx = [...messages]
+      .reverse()
+      .findIndex((m) => m.role !== MessageRole.USER)
+
+    if (lastAssistantIdx === -1) return
+
+    const actualAssistantIdx = messages.length - 1 - lastAssistantIdx
+    const newCollapsed = new Set<number>()
+
+    for (let i = actualAssistantIdx + 1; i < messages.length; i++) {
+      if (messages[i].role === MessageRole.USER) break
+      newCollapsed.add(i)
+    }
+
+    setCollapsedIndexes(newCollapsed)
+  }, [messages])
+
   useEffect(() => {
     const lastAssistantMessage = messages.findLast(
       (m) => m.role !== MessageRole.USER
     )
-
     if (lastAssistantMessage?.fragment) {
       onFragmentClicked(lastAssistantMessage.fragment)
     }
@@ -102,8 +128,9 @@ const MessageContainer = ({
 
   useEffect(() => {
     if (hasProcessedInitialMessage.current) return
-
     const lastMessage = messages[messages.length - 1]
+    if (!lastMessage) return
+
     if (lastMessage?.role === MessageRole.USER) {
       handleBusinessAnalyst(lastMessage.content)
       hasProcessedInitialMessage.current = true
@@ -194,7 +221,6 @@ const MessageContainer = ({
       setIsProcessing(true)
       setNextFrom(MessageRole.DEVELOPER)
       const devRes = await developer(prompt, files)
-
       onCreateMessage({
         content: '',
         role: MessageRole.DEVELOPER,
@@ -213,13 +239,9 @@ const MessageContainer = ({
 
   const handleSend = () => {
     if (!inputValue) return
-
     const messageContent = inputValue
     setInputValue('')
-    onCreateMessage({
-      content: messageContent,
-      role: MessageRole.USER,
-    })
+    onCreateMessage({ content: messageContent, role: MessageRole.USER })
     handleBusinessAnalyst(messageContent)
   }
 
@@ -232,13 +254,13 @@ const MessageContainer = ({
 
   return (
     <div className="h-full flex flex-col border-r bg-white dark:bg-gray-950">
+      {/* Header */}
       <div className="flex-shrink-0 sticky top-0 z-10 bg-white dark:bg-gray-950 border-b border-gray-200 dark:border-gray-700 px-4 py-4">
         <div className="flex items-center gap-3">
           <Link href="/">
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => {}}
               className="h-8 w-8 p-0 hover:bg-gray-100 dark:hover:bg-gray-800"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -256,6 +278,7 @@ const MessageContainer = ({
         </div>
       </div>
 
+      {/* Messages */}
       <div className="flex-1 min-h-0 overflow-hidden">
         <ScrollArea className="h-full" ref={scrollAreaRef}>
           <div className="p-4 space-y-2">
@@ -274,6 +297,45 @@ const MessageContainer = ({
             ) : (
               messages.map((message, index) => {
                 const isAssistant = message.role !== MessageRole.USER
+                const isCollapsed = collapsedIndexes.has(index)
+
+                if (isCollapsed) {
+                  return (
+                    <div
+                      key={message.id || index}
+                      className={`flex gap-3 ${
+                        isAssistant ? 'flex-row' : 'flex-row-reverse'
+                      } cursor-pointer`}
+                      onClick={() => {
+                        const newSet = new Set(collapsedIndexes)
+                        newSet.delete(index)
+                        setCollapsedIndexes(newSet)
+                      }}
+                    >
+                      <div className="flex-shrink-0">
+                        <div
+                          className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                            isAssistant
+                              ? 'bg-gray-100 dark:bg-gray-900'
+                              : 'bg-gray-950 dark:bg-gray-100'
+                          }`}
+                        >
+                          {isAssistant ? (
+                            <AssistantAvatar type={message.role} />
+                          ) : session?.user?.image ? (
+                            <img
+                              src={session.user.image}
+                              alt={session.user.name || 'User'}
+                              className="w-8 h-8 rounded-full object-cover"
+                            />
+                          ) : (
+                            <User className="w-4 h-4 text-white dark:text-gray-950" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                }
 
                 return (
                   <div
@@ -303,6 +365,7 @@ const MessageContainer = ({
                         )}
                       </div>
                     </div>
+
                     <div className="flex-1 max-w-[80%]">
                       <Card
                         className={`p-3 shadow-sm ${
@@ -383,6 +446,7 @@ const MessageContainer = ({
                           </div>
                         )}
                       </Card>
+
                       <div
                         className={`flex items-center gap-1 mt-1 text-xs text-gray-500 dark:text-gray-400 ${
                           isAssistant ? 'justify-start' : 'justify-end'
@@ -407,6 +471,7 @@ const MessageContainer = ({
         </ScrollArea>
       </div>
 
+      {/* Input */}
       <div className="flex-shrink-0 sticky bottom-0 p-4 border-t bg-white dark:bg-gray-950">
         <div className="absolute -top-6 left-0 right-0 h-6 bg-gradient-to-b from-transparent to-background/70 pointer-events-none" />
         <div className="flex gap-2 items-end">

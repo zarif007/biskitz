@@ -1,35 +1,35 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { Square, Maximize2, Minimize2 } from 'lucide-react'
-import { FileSystemTree, WebContainer } from '@webcontainer/api'
 import {
   ResizablePanel,
   ResizableHandle,
   ResizablePanelGroup,
 } from '@/components/ui/resizable'
 import FileExplorer from './FileExplorer'
-import AnsiToHtml from 'ansi-to-html'
 
 interface Props {
   files: { [path: string]: string }
 }
 
-const ansiConverter = new AnsiToHtml()
+// Global WebContainer instance - only one allowed per page
 let globalWebContainer: any = null
+let isBootingWebContainer = false
 
 const WebContainerRunner = ({ files }: Props) => {
   const [webContainer, setWebContainer] = useState<any>(null)
-  const [terminalOutput, setTerminalOutput] = useState<string[]>([])
+  const [terminalOutput, setTerminalOutput] = useState<string>('')
   const [currentCommand, setCurrentCommand] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [isTerminalMaximized, setIsTerminalMaximized] = useState(false)
   const [activeTerminalTab, setActiveTerminalTab] = useState('terminal')
+  const [commandHistory, setCommandHistory] = useState<string[]>([])
+  const [historyIndex, setHistoryIndex] = useState(-1)
+  const [currentProcess, setCurrentProcess] = useState<any>(null)
   const terminalRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const convertToFileSystemTree = (files: {
-    [path: string]: string
-  }): FileSystemTree => {
-    const tree: FileSystemTree = {}
+  const convertToFileSystemTree = (files: { [path: string]: string }) => {
+    const tree: any = {}
     Object.entries(files).forEach(([path, content]) => {
       const parts = path.split('/').filter(Boolean)
       let current = tree
@@ -40,7 +40,7 @@ const WebContainerRunner = ({ files }: Props) => {
         } else {
           if (!current[part]) current[part] = { directory: {} }
           if ('directory' in current[part]) {
-            current = (current[part] as { directory: FileSystemTree }).directory
+            current = current[part].directory
           }
         }
       }
@@ -48,143 +48,151 @@ const WebContainerRunner = ({ files }: Props) => {
     return tree
   }
 
+  const addToTerminal = (text: string) => {
+    setTerminalOutput((prev) => prev + text)
+    setTimeout(() => {
+      if (terminalRef.current) {
+        terminalRef.current.scrollTop = terminalRef.current.scrollHeight
+      }
+    }, 0)
+  }
+
   useEffect(() => {
     const loadWebContainer = async () => {
       try {
-        setTerminalOutput(['🚀 Booting WebContainer...'])
+        addToTerminal('🚀 Initializing WebContainer...\r\n')
 
-        if (!globalWebContainer) {
+        // Import WebContainer dynamically
+        const { WebContainer } = await import('@webcontainer/api')
+
+        // Check if we already have a WebContainer instance
+        if (globalWebContainer) {
+          setWebContainer(globalWebContainer)
+          addToTerminal('✅ Using existing WebContainer instance\r\n')
+        } else if (isBootingWebContainer) {
+          addToTerminal('⏳ WebContainer is already booting, waiting...\r\n')
+          // Wait for the other instance to finish booting
+          const checkInterval = setInterval(() => {
+            if (globalWebContainer && !isBootingWebContainer) {
+              clearInterval(checkInterval)
+              setWebContainer(globalWebContainer)
+              addToTerminal('✅ WebContainer ready\r\n')
+            }
+          }, 100)
+          return
+        } else {
+          // Boot a new instance
+          isBootingWebContainer = true
           globalWebContainer = await WebContainer.boot()
+          isBootingWebContainer = false
+          setWebContainer(globalWebContainer)
+          addToTerminal('✅ WebContainer booted successfully\r\n')
         }
-
-        setWebContainer(globalWebContainer)
-        setTerminalOutput((prev) => [
-          ...prev,
-          '✅ WebContainer booted successfully',
-        ])
 
         const fileSystemTree = convertToFileSystemTree(files)
         await globalWebContainer.mount(fileSystemTree)
-        setTerminalOutput((prev) => [
-          ...prev,
-          '📁 Files mounted successfully',
-          '',
-        ])
+        addToTerminal('📁 Files mounted successfully\r\n')
+        addToTerminal('Ready! You can now run commands.\r\n\r\n')
+
         setIsLoading(false)
       } catch (error) {
-        setTerminalOutput((prev) => [...prev, `❌ Error: ${error}`])
+        addToTerminal(`❌ Error initializing WebContainer: ${error}\r\n`)
+        isBootingWebContainer = false
         setIsLoading(false)
       }
     }
     loadWebContainer()
   }, [files])
 
-  useEffect(() => {
-    if (terminalRef.current) {
-      terminalRef.current.scrollTop = terminalRef.current.scrollHeight
-    }
-  }, [terminalOutput])
+  const runCommand = async (command: string) => {
+    if (!webContainer || !command.trim()) return
 
-  const runCommand = async (cmd: string, args: string[] = []) => {
-    if (!webContainer) return
+    const trimmedCommand = command.trim()
+
+    // Handle built-in commands
+    if (trimmedCommand === 'clear') {
+      setTerminalOutput('')
+      return
+    }
 
     try {
-      const process = await webContainer.spawn(cmd, args)
+      // Parse command and arguments properly
+      const args = trimmedCommand.split(/\s+/)
+      const cmd = args[0]
+      const cmdArgs = args.slice(1)
 
-      const reader = process.output.getReader()
-      const decoder = new TextDecoder()
+      addToTerminal(`$ ${trimmedCommand}\r\n`)
 
-      let outputBuffer = ''
+      const process = await webContainer.spawn(cmd, cmdArgs, {
+        terminal: {
+          cols: 80,
+          rows: 24,
+        },
+      })
 
-      const readOutput = async () => {
-        try {
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
+      setCurrentProcess(process)
 
+      // Use the proper WebContainer API with pipeTo and WritableStream
+      process.output.pipeTo(
+        new WritableStream({
+          write(data) {
+            // Convert Uint8Array to string properly
             let text = ''
-            if (value instanceof Uint8Array) {
-              text = decoder.decode(value, { stream: true })
-            } else if (typeof value === 'string') {
-              text = value
+            if (data instanceof Uint8Array) {
+              text = new TextDecoder().decode(data)
+            } else if (typeof data === 'string') {
+              text = data
             } else {
-              text = String(value)
+              text = String(data)
             }
+            addToTerminal(text)
+          },
+          close() {
+            setCurrentProcess(null)
+          },
+          abort(err) {
+            addToTerminal(`\r\nProcess aborted: ${err}\r\n`)
+            setCurrentProcess(null)
+          },
+        })
+      )
 
-            outputBuffer += text
-
-            if (text.includes('\n') || text.includes('\r')) {
-              const lines = outputBuffer.split(/\r?\n/)
-              outputBuffer = lines.pop() || ''
-
-              setTerminalOutput((prev) => {
-                const newOutput = [...prev]
-                if (lines.length > 0) {
-                  if (newOutput.length > 0) {
-                    newOutput[newOutput.length - 1] += lines[0]
-                    newOutput.push(...lines.slice(1))
-                  } else {
-                    newOutput.push(...lines)
-                  }
-                }
-                return newOutput
-              })
-            } else {
-              setTerminalOutput((prev) => {
-                const newOutput = [...prev]
-                if (newOutput.length > 0) {
-                  newOutput[newOutput.length - 1] += text
-                } else {
-                  newOutput.push(text)
-                }
-                return newOutput
-              })
-            }
-          }
-
-          if (outputBuffer) {
-            setTerminalOutput((prev) => {
-              const newOutput = [...prev]
-              if (newOutput.length > 0) {
-                newOutput[newOutput.length - 1] += outputBuffer
-              } else {
-                newOutput.push(outputBuffer)
-              }
-              return newOutput
-            })
-          }
-        } catch (error) {
-          console.error('Error reading output:', error)
-        }
-      }
-
-      readOutput()
-
+      // Wait for process to complete
       const exitCode = await process.exit
+
       if (exitCode !== 0) {
-        setTerminalOutput((prev) => [
-          ...prev,
-          `❌ Command exited with code ${exitCode}`,
-        ])
+        addToTerminal(`\r\nProcess exited with code ${exitCode}\r\n`)
       }
+
+      setCurrentProcess(null)
     } catch (error) {
-      setTerminalOutput((prev) => [...prev, `❌ Command failed: ${error}`])
+      addToTerminal(`Error executing command: ${error}\r\n`)
     }
   }
 
   const executeCommand = async () => {
     if (!currentCommand.trim()) return
 
-    const trimmedCommand = currentCommand.trim()
-    const [cmd, ...args] = trimmedCommand.split(' ')
+    const command = currentCommand.trim()
 
-    setTerminalOutput((prev) => [...prev, `$ ${trimmedCommand}`, ''])
+    // Add to history
+    if (
+      command &&
+      (!commandHistory.length ||
+        commandHistory[commandHistory.length - 1] !== command)
+    ) {
+      setCommandHistory((prev) => [...prev, command])
+    }
+    setHistoryIndex(-1)
+
     setCurrentCommand('')
+    await runCommand(command)
 
-    await runCommand(cmd, args)
-
+    // Focus input after command execution
     setTimeout(() => {
-      if (inputRef.current) inputRef.current.focus()
+      if (inputRef.current) {
+        inputRef.current.focus()
+      }
     }, 100)
   }
 
@@ -193,13 +201,61 @@ const WebContainerRunner = ({ files }: Props) => {
       executeCommand()
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
+      if (commandHistory.length > 0) {
+        const newIndex =
+          historyIndex === -1
+            ? commandHistory.length - 1
+            : Math.max(0, historyIndex - 1)
+        setHistoryIndex(newIndex)
+        setCurrentCommand(commandHistory[newIndex])
+      }
     } else if (e.key === 'ArrowDown') {
       e.preventDefault()
+      if (historyIndex !== -1) {
+        const newIndex = Math.min(commandHistory.length - 1, historyIndex + 1)
+        if (
+          newIndex === commandHistory.length - 1 &&
+          historyIndex === commandHistory.length - 1
+        ) {
+          setHistoryIndex(-1)
+          setCurrentCommand('')
+        } else {
+          setHistoryIndex(newIndex)
+          setCurrentCommand(commandHistory[newIndex])
+        }
+      }
+    } else if (e.key === 'Tab') {
+      e.preventDefault()
+      // Basic tab completion could be added here
+    } else if (e.ctrlKey && e.key === 'c') {
+      e.preventDefault()
+      // Kill current process
+      if (currentProcess) {
+        currentProcess.kill()
+        addToTerminal('^C\r\n')
+        setCurrentProcess(null)
+      }
     }
   }
 
   const clearTerminal = () => {
-    setTerminalOutput([])
+    setTerminalOutput('')
+  }
+
+  // Convert terminal output to HTML with proper line breaks
+  const formatTerminalOutput = (output: string) => {
+    return output
+      .split('\r\n')
+      .join('\n')
+      .split('\n')
+      .map((line, index) => (
+        <div
+          key={index}
+          className="whitespace-pre-wrap leading-5 min-h-[1.25rem]"
+        >
+          {line || '\u00A0'}
+        </div>
+      ))
   }
 
   return (
@@ -221,7 +277,7 @@ const WebContainerRunner = ({ files }: Props) => {
           minSize={20}
         >
           <div className="bg-gray-50 dark:bg-gray-900 border-t border-gray-300 dark:border-gray-800 flex flex-col h-full">
-            <div className="h-10 bg-gray-200 dark:bg-gray-950 flex items-center justify-between px-4 border-b border-gray-300 dark:border-gray-800">
+            <div className="h-10 bg-gray-200 dark:bg-gray-950 flex items-center justify-between px-4 border-b border-gray-300 dark:border-gray-800 flex-shrink-0">
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setActiveTerminalTab('terminal')}
@@ -279,25 +335,24 @@ const WebContainerRunner = ({ files }: Props) => {
                 </button>
               </div>
             </div>
+
             {activeTerminalTab === 'terminal' && (
               <div className="flex-1 flex flex-col min-h-0">
                 <div
                   ref={terminalRef}
-                  className="flex-1 min-h-0 overflow-y-auto font-mono text-sm p-4 bg-gray-100 text-black dark:bg-gray-950 dark:text-gray-100"
+                  className="flex-1 min-h-0 overflow-y-auto font-mono text-sm p-4 bg-black text-green-400"
+                  style={{
+                    fontFamily:
+                      '"Courier New", "Monaco", "Lucida Console", monospace',
+                    fontSize: '14px',
+                    lineHeight: '1.25',
+                  }}
                 >
-                  {terminalOutput.map((line, index) => (
-                    <div
-                      key={index}
-                      className="whitespace-pre-wrap leading-5"
-                      dangerouslySetInnerHTML={{
-                        __html: ansiConverter.toHtml(line || ''),
-                      }}
-                    />
-                  ))}
+                  {formatTerminalOutput(terminalOutput)}
                   {!isLoading && (
                     <div className="flex items-center mt-2">
-                      <span className="text-green-600 dark:text-green-400 mr-2">
-                        $
+                      <span className="text-green-400 mr-2">
+                        webcontainer:~$
                       </span>
                       <input
                         ref={inputRef}
@@ -305,19 +360,23 @@ const WebContainerRunner = ({ files }: Props) => {
                         value={currentCommand}
                         onChange={(e) => setCurrentCommand(e.target.value)}
                         onKeyDown={handleKeyPress}
-                        className="bg-transparent border-none outline-none flex-1 text-black dark:text-gray-100"
+                        className="bg-transparent border-none outline-none flex-1 text-green-400 caret-green-400"
                         autoFocus
+                        disabled={isLoading || currentProcess !== null}
+                        placeholder={currentProcess ? 'Process running...' : ''}
                       />
                     </div>
                   )}
                 </div>
               </div>
             )}
+
             {activeTerminalTab === 'problems' && (
               <div className="flex-1 p-4 text-gray-600 dark:text-gray-400">
                 <div className="text-center py-8">No problems detected</div>
               </div>
             )}
+
             {activeTerminalTab === 'output' && (
               <div className="flex-1 p-4 text-gray-600 dark:text-gray-400">
                 <div className="text-center py-8">No output to display</div>

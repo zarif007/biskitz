@@ -114,61 +114,13 @@ export const ProjectView = ({ projectId }: Props) => {
                 />
               </div>
             ) : (
-              <Tabs
-                className="h-full flex flex-col"
-                defaultValue="code"
-                value={tabState}
-                onValueChange={(value) =>
-                  setTabState(value as 'preview' | 'code')
-                }
-              >
-                <div className="flex-shrink-0 w-full flex items-center p-2 border-b gap-x-2">
-                  <TabsList className="h-8 p-0 border rounded-md">
-                    <TabsTrigger value="preview" className="rounded-sm">
-                      <EyeIcon /> <span>Demo</span>
-                    </TabsTrigger>
-                    <TabsTrigger value="code" className="rounded-sm">
-                      <Code2Icon /> <span>Code</span>
-                    </TabsTrigger>
-                  </TabsList>
-                  <div className="ml-auto flex items-center gap-x-2">
-                    <Button asChild size="sm" variant="default">
-                      <Link href="/pricing">
-                        <CrownIcon />
-                        Upgrade
-                      </Link>
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="flex-1 min-h-0">
-                  <TabsContent
-                    value="preview"
-                    className="h-full m-0 overflow-auto"
-                  >
-                    {!!activeFragment && (
-                      <FragmentWeb activeFragment={activeFragment} />
-                    )}
-                  </TabsContent>
-                  <TabsContent
-                    value="code"
-                    className="h-full m-0 overflow-auto"
-                  >
-                    {!!activeFragment && (
-                      <WebContainerRunner
-                        files={
-                          activeFragment.files as { [path: string]: string }
-                        }
-                      />
-                      // <FileExplorer
-                      //   files={
-                      //     activeFragment.files as { [path: string]: string }
-                      //   }
-                      // />
-                    )}
-                  </TabsContent>
-                </div>
-              </Tabs>
+              <div className="h-full m-0 overflow-auto">
+                {!!activeFragment && (
+                  <WebContainerRunner
+                    files={activeFragment.files as { [path: string]: string }}
+                  />
+                )}
+              </div>
             )}
           </Suspense>
         </ResizablePanel>
