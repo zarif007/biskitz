@@ -116,7 +116,10 @@ export const ProjectView = ({ projectId }: Props) => {
             ) : (
               <div className="h-full m-0 overflow-auto">
                 {!!activeFragment && (
-                  <WebContainerRunner
+                  // <WebContainerRunner
+                  //   files={activeFragment.files as { [path: string]: string }}
+                  // />
+                  <FileExplorer
                     files={activeFragment.files as { [path: string]: string }}
                   />
                 )}

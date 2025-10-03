@@ -1,41 +1,51 @@
-"use client";
+'use client'
 
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
-import { ArrowUp } from "lucide-react";
-import Image from "next/image";
-import { useState } from "react";
+import { Textarea } from '@/components/ui/textarea'
+import { Button } from '@/components/ui/button'
+import { ArrowUp } from 'lucide-react'
+import Image from 'next/image'
+import { useState } from 'react'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { useTRPC } from "@/trpc/client";
-import { useMutation } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+} from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
+import { useTRPC } from '@/trpc/client'
+import { useMutation } from '@tanstack/react-query'
+import { useRouter } from 'next/navigation'
 
 const PromptInput = () => {
-  const trpc = useTRPC();
-  const router = useRouter();
-  const createProject = useMutation(trpc.project.create.mutationOptions({}));
-  const [userInput, setUserInput] = useState("");
-  const [loading, setLoading] = useState(false);
+  const trpc = useTRPC()
+  const router = useRouter()
+  const createProject = useMutation(trpc.project.create.mutationOptions({}))
+  const [userInput, setUserInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [packageType, setPackageType] = useState<'NPM' | 'COMPONENT' | 'SDK'>(
+    'NPM'
+  )
+  const [tddEnabled, setTddEnabled] = useState(false)
 
   const onGenerate = async (input: string) => {
-    if (!input) return;
-    setLoading(true);
+    if (!input) return
+    setLoading(true)
     try {
-      setUserInput("");
-      const res = await createProject.mutateAsync({ value: input });
-      router.push(`/projects/${res.id}`);
+      setUserInput('')
+      const res = await createProject.mutateAsync({
+        value: input,
+        packageType,
+        tddEnabled,
+      })
+      router.push(`/projects/${res.id}`)
     } catch (error) {
-      console.log(error);
+      console.log(error)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   return (
     <div className="w-full max-w-3xl">
@@ -78,9 +88,14 @@ const PromptInput = () => {
                 <ArrowUp className="w-5 h-5" />
               )}
             </Button>
-            <div className="absolute left-3 bottom-3 flex gap-1 bg-white dark:bg-black font-bold">
-              <Select defaultValue="npm">
-                <SelectTrigger className="w-[140px] h-9 text-xs focus:ring-0 focus:ring-offset-0 outline-none ring-0 cursor-pointer">
+            <div className="absolute rounded-md left-3 bottom-3 flex gap-3 items-center px-1">
+              <Select
+                defaultValue="npm"
+                onValueChange={(value) =>
+                  setPackageType(value as 'NPM' | 'COMPONENT' | 'SDK')
+                }
+              >
+                <SelectTrigger className="w-[140px] h-9 text-xs focus:ring-0 focus:ring-offset-0 outline-none ring-0 cursor-pointer border-0 font-bold bg-slate-100 dark:bg-black">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -98,7 +113,7 @@ const PromptInput = () => {
                     NPM Package
                   </SelectItem>
                   <SelectItem
-                    value="ui"
+                    value="component"
                     disabled
                     className="text-xs flex items-center gap-2 opacity-60"
                   >
@@ -133,12 +148,28 @@ const PromptInput = () => {
                   </SelectItem>
                 </SelectContent>
               </Select>
+
+              <div className="flex items-center gap-2 pr-1 ">
+                <Switch
+                  id="tdd-mode"
+                  checked={tddEnabled}
+                  onCheckedChange={setTddEnabled}
+                  className="h-5 w-9"
+                  disabled
+                />
+                <Label
+                  htmlFor="tdd-mode"
+                  className="text-xs font-bold cursor-pointer"
+                >
+                  TDD
+                </Label>
+              </div>
             </div>
           </div>
         </div>
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default PromptInput;
+export default PromptInput

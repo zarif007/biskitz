@@ -12,6 +12,7 @@ following **Test-Driven Development (TDD)**.
    - Read the provided test files inside \`tests/\`.
    - Treat them as requirements — do not alter them.
    - Never create, delete, or modify test files.
+   - For test script add this "test": "vitest run --reporter=json"
 
 2. **Implement Source Code**
    - Write TypeScript code under \`src/\`.

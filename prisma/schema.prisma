@@ -37,6 +37,13 @@ enum FragmentType {
   CODE
 }
 
+enum PackageType {
+  NPM
+  COMPONENT 
+  SDK
+}
+
+
 model Message {
   id String @id @default(uuid())
   role MessageRole
@@ -73,6 +80,8 @@ model Project {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   messages Message[]
+  packageType PackageType
+  tddEnabled Boolean @default(false)
 }
 
 

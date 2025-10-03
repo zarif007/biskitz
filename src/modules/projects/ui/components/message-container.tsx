@@ -29,6 +29,7 @@ import systemArchitect from '@/agents/systemArchitect'
 import Link from 'next/link'
 import developer from '@/agents/developer'
 import tester from '@/agents/tester'
+import { runTestsInWebContainer } from '@/utils/runTestsInWebContainer'
 
 interface Message {
   role: MessageRole
@@ -72,9 +73,6 @@ const MessageContainer = ({
   const [isProcessing, setIsProcessing] = useState<boolean>(false)
   const [expandedFragmentIdx, setExpandedFragmentIdx] = useState<number | null>(
     null
-  )
-  const [currentFiles, setCurrentFile] = useState<{ [path: string]: string }>(
-    {}
   )
   const hasProcessedInitialMessage = useRef(false)
 
@@ -141,10 +139,21 @@ const MessageContainer = ({
       handleTester(lastMessage.content)
       hasProcessedInitialMessage.current = true
     } else if (lastMessage?.role === MessageRole.TESTER) {
-      handleDev(lastMessage.content, currentFiles)
+      handleDev(lastMessage.content, lastMessage.fragment?.files as {})
       hasProcessedInitialMessage.current = true
+    } else if (lastMessage?.role === MessageRole.DEVELOPER) {
+      testCode(lastMessage.fragment?.files as { [path: string]: string })
     }
   }, [])
+
+  const testCode = async (files: { [path: string]: string }) => {
+    console.log(
+      '--------!!!--------',
+      await runTestsInWebContainer({
+        files: { ...files },
+      })
+    )
+  }
 
   const handleBusinessAnalyst = async (prompt: string) => {
     try {
@@ -204,7 +213,6 @@ const MessageContainer = ({
           title: 'Code',
         },
       })
-      setCurrentFile(() => testerRes?.state.files ?? {})
       if (testerRes) await handleDev(prompt, testerRes?.state.files ?? {})
     } catch (e) {
       console.error('Error generating code:', e)
@@ -230,6 +238,7 @@ const MessageContainer = ({
           title: 'Code',
         },
       })
+      await testCode({ ...(devRes?.state.files ?? {}), ...files })
     } catch (e) {
       console.error('Error generating code:', e)
     } finally {

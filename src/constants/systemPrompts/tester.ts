@@ -8,7 +8,8 @@ based on the system architect’s requirements.
 
 ## Test Requirements:
 1. **Framework**
-   - Use a modern JavaScript/TypeScript test framework (Vitest preferred, Jest acceptable).
+   - Use a modern JavaScript/TypeScript test framework (Vitest preferred).
+   - Add 30_000, 30 seconds timeout for each test.
    - Use ESM imports and TypeScript-friendly syntax.
 
 2. **Coverage**
