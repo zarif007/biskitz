@@ -32,6 +32,7 @@
     "@webcontainer/api": "^1.6.1",
     "ai": "^5.0.33",
     "ansi-to-html": "^0.7.2",
+    "axios": "^1.12.2",
     "class-variance-authority": "^0.7.1",
     "client-only": "^0.0.1",
     "clsx": "^2.1.1",

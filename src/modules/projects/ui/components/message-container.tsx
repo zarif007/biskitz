@@ -55,6 +55,7 @@ interface Props {
   activeFragment: Fragment | null
   onFragmentClicked: (fragment: Fragment | null) => void
   headerTitle?: string
+  tddEnabled: boolean
 }
 
 const MessageContainer = ({
@@ -64,6 +65,7 @@ const MessageContainer = ({
   isMessageCreationPending,
   onCreateMessage,
   headerTitle = 'Conversation',
+  tddEnabled,
 }: Props) => {
   const { data: session } = useSession()
   const bottomRef = useRef<HTMLDivElement | null>(null)
@@ -76,12 +78,6 @@ const MessageContainer = ({
   )
   const hasProcessedInitialMessage = useRef(false)
 
-  // Collapsed messages state
-  const [collapsedIndexes, setCollapsedIndexes] = useState<Set<number>>(
-    new Set()
-  )
-
-  // Scroll to bottom on new messages
   useEffect(() => {
     if (scrollAreaRef.current) {
       const scrollContainer = scrollAreaRef.current.querySelector(
@@ -93,27 +89,6 @@ const MessageContainer = ({
     }
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length])
-
-  // Auto-update collapsed indexes
-  useEffect(() => {
-    if (messages.length < 2) return
-
-    const lastAssistantIdx = [...messages]
-      .reverse()
-      .findIndex((m) => m.role !== MessageRole.USER)
-
-    if (lastAssistantIdx === -1) return
-
-    const actualAssistantIdx = messages.length - 1 - lastAssistantIdx
-    const newCollapsed = new Set<number>()
-
-    for (let i = actualAssistantIdx + 1; i < messages.length; i++) {
-      if (messages[i].role === MessageRole.USER) break
-      newCollapsed.add(i)
-    }
-
-    setCollapsedIndexes(newCollapsed)
-  }, [messages])
 
   useEffect(() => {
     const lastAssistantMessage = messages.findLast(
@@ -129,6 +104,7 @@ const MessageContainer = ({
     const lastMessage = messages[messages.length - 1]
     if (!lastMessage) return
 
+    // Need to introduce level instead of going role by role as a role may appear multiple times
     if (lastMessage?.role === MessageRole.USER) {
       handleBusinessAnalyst(lastMessage.content)
       hasProcessedInitialMessage.current = true
@@ -147,6 +123,7 @@ const MessageContainer = ({
   }, [])
 
   const testCode = async (files: { [path: string]: string }) => {
+    if (!tddEnabled) return
     console.log(
       '--------!!!--------',
       await runTestsInWebContainer({
@@ -160,16 +137,18 @@ const MessageContainer = ({
       setIsProcessing(true)
       setNextFrom(MessageRole.BUSINESS_ANALYST)
       const businessAnalystRes = await businessAnalyst(prompt)
+      const res = businessAnalystRes.response
       onCreateMessage({
-        content: '',
+        content:
+          '@sys_arch here’s the requirement. Design the system architecture and define the key modules.',
         role: MessageRole.BUSINESS_ANALYST,
         fragment: {
           type: FragmentType.DOC,
-          files: { ['Analysis Report']: businessAnalystRes ?? '' },
+          files: { ['Analysis Report']: res ?? '' },
           title: 'Analysis Report',
         },
       })
-      if (businessAnalystRes) await handleSystemArchitect(businessAnalystRes)
+      if (res) await handleSystemArchitect(res)
     } catch (e) {
       console.error('Error generating code:', e)
     } finally {
@@ -182,16 +161,18 @@ const MessageContainer = ({
       setIsProcessing(true)
       setNextFrom(MessageRole.SYSTEM_ARCHITECT)
       const systemArchitectRes = await systemArchitect(prompt)
+      const res = systemArchitectRes.response
       onCreateMessage({
-        content: '',
+        content:
+          '@dev here’s the system design. Implement it as a complete NPM package.',
         role: MessageRole.SYSTEM_ARCHITECT,
         fragment: {
           type: FragmentType.DOC,
-          files: { ['System Architecture']: systemArchitectRes ?? '' },
+          files: { ['System Architecture']: res ?? '' },
           title: 'System Architecture',
         },
       })
-      if (systemArchitectRes) await handleTester(systemArchitectRes)
+      if (res) await handleTester(res)
     } catch (e) {
       console.error('Error generating code:', e)
     } finally {
@@ -201,19 +182,23 @@ const MessageContainer = ({
 
   const handleTester = async (prompt: string) => {
     try {
-      setIsProcessing(true)
-      setNextFrom(MessageRole.TESTER)
-      const testerRes = await tester(prompt)
-      onCreateMessage({
-        content: '',
-        role: MessageRole.TESTER,
-        fragment: {
-          type: FragmentType.CODE,
-          files: testerRes?.state.files ?? {},
-          title: 'Code',
-        },
-      })
-      if (testerRes) await handleDev(prompt, testerRes?.state.files ?? {})
+      if (tddEnabled) {
+        setIsProcessing(true)
+        setNextFrom(MessageRole.TESTER)
+        const testerRes = await tester(prompt)
+        onCreateMessage({
+          content: '',
+          role: MessageRole.TESTER,
+          fragment: {
+            type: FragmentType.CODE,
+            files: testerRes?.state.files ?? {},
+            title: 'Code',
+          },
+        })
+        if (testerRes) await handleDev(prompt, testerRes?.state.files ?? {})
+      } else {
+        await handleDev(prompt, {})
+      }
     } catch (e) {
       console.error('Error generating code:', e)
     } finally {
@@ -228,9 +213,10 @@ const MessageContainer = ({
     try {
       setIsProcessing(true)
       setNextFrom(MessageRole.DEVELOPER)
-      const devRes = await developer(prompt, files)
+      const devRes = await developer(prompt, files, tddEnabled)
       onCreateMessage({
-        content: '',
+        content:
+          '@security_engineer code is ready. Review for security issues and vulnerabilities.',
         role: MessageRole.DEVELOPER,
         fragment: {
           type: FragmentType.CODE,
@@ -306,45 +292,6 @@ const MessageContainer = ({
             ) : (
               messages.map((message, index) => {
                 const isAssistant = message.role !== MessageRole.USER
-                const isCollapsed = collapsedIndexes.has(index)
-
-                if (isCollapsed) {
-                  return (
-                    <div
-                      key={message.id || index}
-                      className={`flex gap-3 ${
-                        isAssistant ? 'flex-row' : 'flex-row-reverse'
-                      } cursor-pointer`}
-                      onClick={() => {
-                        const newSet = new Set(collapsedIndexes)
-                        newSet.delete(index)
-                        setCollapsedIndexes(newSet)
-                      }}
-                    >
-                      <div className="flex-shrink-0">
-                        <div
-                          className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                            isAssistant
-                              ? 'bg-gray-100 dark:bg-gray-900'
-                              : 'bg-gray-950 dark:bg-gray-100'
-                          }`}
-                        >
-                          {isAssistant ? (
-                            <AssistantAvatar type={message.role} />
-                          ) : session?.user?.image ? (
-                            <img
-                              src={session.user.image}
-                              alt={session.user.name || 'User'}
-                              className="w-8 h-8 rounded-full object-cover"
-                            />
-                          ) : (
-                            <User className="w-4 h-4 text-white dark:text-gray-950" />
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                }
 
                 return (
                   <div
@@ -377,7 +324,7 @@ const MessageContainer = ({
 
                     <div className="flex-1 max-w-[80%]">
                       <Card
-                        className={`p-3 shadow-sm ${
+                        className={`p-3 shadow-sm gap-2 ${
                           isAssistant
                             ? 'bg-gray-50 dark:bg-gray-950 border-gray-200 dark:border-gray-700'
                             : 'bg-gray-950 dark:bg-gray-100 border-gray-950 dark:border-gray-100'
@@ -391,7 +338,26 @@ const MessageContainer = ({
                                 : 'text-white dark:text-gray-950'
                             }`}
                           >
-                            {message.content}
+                            {isAssistant && message.content.includes('@') ? (
+                              <>
+                                {message.content
+                                  .split(/(@\S+)/g)
+                                  .map((part, index) =>
+                                    part.startsWith('@') ? (
+                                      <span
+                                        key={index}
+                                        className="text-blue-600 font-medium"
+                                      >
+                                        {part}
+                                      </span>
+                                    ) : (
+                                      part
+                                    )
+                                  )}
+                              </>
+                            ) : (
+                              message.content
+                            )}
                           </p>
                         )}
                         {message.fragment && (

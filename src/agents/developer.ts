@@ -1,83 +1,35 @@
 'use server'
 
-import { generateText, stepCountIs, tool } from 'ai'
-import { openai } from '@ai-sdk/openai'
-import DEV_AGENT_PROMPT from '@/constants/systemPrompts/dev'
-import { z } from 'zod'
-
-interface CodeGenState {
-  files: { [path: string]: string }
-  summary?: string
-}
+import axios from 'axios'
 
 const developer = async (
   prompt: string,
-  currentFolder: { [path: string]: string }
+  currentFolder: { [path: string]: string },
+  tddEnabled: boolean
 ) => {
-  const state: CodeGenState = {
-    files: {},
-  }
-
-  const conversationHistory: Array<{
-    role: 'user' | 'assistant'
-    content: string
-  }> = [
-    {
-      role: 'user',
-      content: `This is the requirement fro the system architect \n ${prompt.trim()} and this is the current test file \n ${JSON.stringify(
-        currentFolder
-      )}`,
-    },
-  ]
-
-  // ---- Tools ----
-  const createOrUpdateFilesTool = tool({
-    description: 'Create or update files for the npm package.',
-    inputSchema: z.object({
-      files: z.array(
-        z.object({
-          path: z
-            .string()
-            .describe('Path of the file (e.g. index.ts, package.json)'),
-          content: z.string().describe('File content'),
-        })
-      ),
-    }),
-    execute: async ({ files }) => {
-      for (const file of files) {
-        state.files[file.path] = file.content
-      }
-      return state.files
-    },
-  })
-
-  const readFilesTool = tool({
-    description: 'Read files already generated in the project.',
-    inputSchema: z.object({
-      files: z.array(z.string()).describe('Paths of files to read'),
-    }),
-    execute: async ({ files }) => {
-      return files.map((file) => ({
-        path: file,
-        content: state.files[file] || null,
-      }))
-    },
-  })
-
   try {
-    const result = await generateText({
-      model: openai('gpt-4.1-mini'),
-      system: DEV_AGENT_PROMPT,
-      messages: conversationHistory,
-      tools: {
-        createOrUpdateFiles: createOrUpdateFilesTool,
-        readFiles: readFilesTool,
+    const response = await axios.post(
+      `${process.env.AGENTS_API_BASE_URL}/agents/developer`,
+      {
+        prompt,
+        current_folder: currentFolder,
+        tdd_enabled: tddEnabled,
       },
-      stopWhen: stepCountIs(2),
-    })
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.AGENT_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    )
 
-    return { res: result.text, state }
-  } catch {}
+    return response.data
+  } catch (error: any) {
+    console.error('Error in developer:', error.response?.data || error.message)
+    throw new Error(
+      error.response?.data?.message || 'Failed to process request'
+    )
+  }
 }
 
 export default developer

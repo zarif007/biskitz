@@ -8,27 +8,14 @@ import {
   ResizablePanelGroup,
 } from '@/components/ui/resizable'
 import MessageContainer from '../components/message-container'
-import ProjectContainer from '../components/project-container'
 import {
   useMutation,
   useQueryClient,
   useSuspenseQuery,
 } from '@tanstack/react-query'
-import {
-  Fragment,
-  FragmentType,
-  Message,
-  MessageRole,
-  MessageType,
-} from '@/generated/prisma'
-import FragmentWeb from '../components/fragment-web'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Code2Icon, CrownIcon, EyeIcon } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import Link from 'next/link'
+import { Fragment, FragmentType, MessageRole } from '@/generated/prisma'
 import FileExplorer from '@/components/FileExplorer'
 import DocView from '../components/doc-view'
-import WebContainerRunner from '@/components/WebContainerRunner'
 
 interface Props {
   projectId: string
@@ -36,12 +23,15 @@ interface Props {
 
 export const ProjectView = ({ projectId }: Props) => {
   const [activeFragment, setActiveFragment] = useState<Fragment | null>(null)
-  const [tabState, setTabState] = useState<'preview' | 'code'>('preview')
   const trpc = useTRPC()
   const queryClient = useQueryClient()
 
   const { data: messages } = useSuspenseQuery(
     trpc.messages.getMany.queryOptions({ projectId })
+  )
+
+  const { data: project } = useSuspenseQuery(
+    trpc.project.getOne.queryOptions({ id: projectId })
   )
 
   const createMessage = useMutation(
@@ -96,6 +86,7 @@ export const ProjectView = ({ projectId }: Props) => {
               onCreateMessage={handleCreateMessage}
               activeFragment={activeFragment}
               onFragmentClicked={handleFragmentClicked}
+              tddEnabled={project?.tddEnabled || false}
             />
           </Suspense>
         </ResizablePanel>
