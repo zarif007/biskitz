@@ -2,11 +2,17 @@
 
 import axios from 'axios'
 
-const systemArchitect = async (prompt: string) => {
+interface LLMConversation {
+  type: string
+  role: string
+  content: string
+}
+
+const systemArchitect = async (conversation: LLMConversation[]) => {
   try {
     const response = await axios.post(
       `${process.env.AGENTS_API_BASE_URL}/agents/system-architect`,
-      { prompt },
+      { conversation },
       {
         headers: {
           Authorization: `Bearer ${process.env.AGENT_API_KEY}`,

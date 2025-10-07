@@ -74,6 +74,8 @@ export const projectsRouter = createTRPCRouter({
               content: input.value,
               role: 'USER',
               type: 'RESULT',
+              timeTaken: 0,
+              totalTokens: 0,
             },
           },
         },

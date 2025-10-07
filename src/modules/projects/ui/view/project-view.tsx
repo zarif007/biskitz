@@ -56,6 +56,8 @@ export const ProjectView = ({ projectId }: Props) => {
   const handleCreateMessage = async (msg: {
     content: string
     role: MessageRole
+    timeTaken?: number
+    totalTokens?: number
     fragment?: {
       type: FragmentType
       title: string
@@ -69,6 +71,8 @@ export const ProjectView = ({ projectId }: Props) => {
         role: msg.role,
         type: 'RESULT',
         fragment: msg.fragment,
+        timeTaken: msg.timeTaken || 0,
+        totalTokens: msg.totalTokens || 0,
       })
     } catch (error) {
       console.error('Message creation failed:', error)

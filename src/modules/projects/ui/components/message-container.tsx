@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useMemo } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -30,6 +30,7 @@ import Link from 'next/link'
 import developer from '@/agents/developer'
 import tester from '@/agents/tester'
 import { runTestsInWebContainer } from '@/utils/runTestsInWebContainer'
+import convertToOpenAIFormatWithFilter from '@/utils/convertToAIFormat'
 
 interface Message {
   role: MessageRole
@@ -38,6 +39,8 @@ interface Message {
   fragment: Fragment | null
   type: MessageType
   id?: string
+  totalTokens?: number
+  timeTaken?: number
 }
 
 interface Props {
@@ -46,6 +49,8 @@ interface Props {
   onCreateMessage: (msg: {
     content: string
     role: MessageRole
+    totalTokens?: number
+    timeTaken?: number
     fragment?: {
       type: FragmentType
       title: string
@@ -76,7 +81,39 @@ const MessageContainer = ({
   const [expandedFragmentIdx, setExpandedFragmentIdx] = useState<number | null>(
     null
   )
+  const [mergedFiles, setMergedFiles] = useState<{ [path: string]: string }>({})
   const hasProcessedInitialMessage = useRef(false)
+
+  const { totalMessages, totalTimeSeconds, totalTokens } = useMemo(() => {
+    const totalMessages = messages.length
+    const totalTimeSeconds = messages.reduce(
+      (acc, m) => acc + (m.timeTaken || 0),
+      0
+    )
+    const totalTokens = messages.reduce(
+      (acc, m) => acc + (m.totalTokens || 0),
+      0
+    )
+    return { totalMessages, totalTimeSeconds, totalTokens }
+  }, [messages])
+
+  const formatTime = (seconds: number) => {
+    if (!seconds) return '0s'
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`
+  }
+
+  useEffect(() => {
+    const lastDevMsg = [...messages]
+      .reverse()
+      .find((m) => m.role === MessageRole.DEVELOPER)
+    if (lastDevMsg?.fragment?.files) {
+      setMergedFiles({
+        ...(lastDevMsg.fragment.files as { [path: string]: string }),
+      })
+    }
+  }, [messages])
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -105,6 +142,7 @@ const MessageContainer = ({
     if (!lastMessage) return
 
     // Need to introduce level instead of going role by role as a role may appear multiple times
+    // Also need to add version no. for each agent
     if (lastMessage?.role === MessageRole.USER) {
       handleBusinessAnalyst(lastMessage.content)
       hasProcessedInitialMessage.current = true
@@ -132,23 +170,33 @@ const MessageContainer = ({
     )
   }
 
+  const buildPromptWithHistory = (newPrompt: string, role: string) => {
+    const relevantMessages = convertToOpenAIFormatWithFilter(messages)
+
+    return [...relevantMessages, { type: 'text', role, content: newPrompt }]
+  }
+
   const handleBusinessAnalyst = async (prompt: string) => {
     try {
       setIsProcessing(true)
       setNextFrom(MessageRole.BUSINESS_ANALYST)
-      const businessAnalystRes = await businessAnalyst(prompt)
-      const res = businessAnalystRes.response
+      const businessAnalystRes = await businessAnalyst(
+        buildPromptWithHistory(prompt, 'assistant')
+      )
       onCreateMessage({
         content:
           '@sys_arch here’s the requirement. Design the system architecture and define the key modules.',
         role: MessageRole.BUSINESS_ANALYST,
+        timeTaken: businessAnalystRes.time_taken_seconds,
+        totalTokens: businessAnalystRes.tokens.total_tokens,
         fragment: {
           type: FragmentType.DOC,
-          files: { ['Analysis Report']: res ?? '' },
+          files: { ['Analysis Report']: businessAnalystRes.response ?? '' },
           title: 'Analysis Report',
         },
       })
-      if (res) await handleSystemArchitect(res)
+      if (businessAnalystRes.response)
+        await handleSystemArchitect(businessAnalystRes.response)
     } catch (e) {
       console.error('Error generating code:', e)
     } finally {
@@ -160,19 +208,23 @@ const MessageContainer = ({
     try {
       setIsProcessing(true)
       setNextFrom(MessageRole.SYSTEM_ARCHITECT)
-      const systemArchitectRes = await systemArchitect(prompt)
-      const res = systemArchitectRes.response
+      const systemArchitectRes = await systemArchitect(
+        buildPromptWithHistory(prompt, 'assistant')
+      )
       onCreateMessage({
         content:
           '@dev here’s the system design. Implement it as a complete NPM package.',
         role: MessageRole.SYSTEM_ARCHITECT,
+        timeTaken: systemArchitectRes.time_taken_seconds,
+        totalTokens: systemArchitectRes.tokens.total_tokens,
         fragment: {
           type: FragmentType.DOC,
-          files: { ['System Architecture']: res ?? '' },
+          files: { ['System Architecture']: systemArchitectRes.response ?? '' },
           title: 'System Architecture',
         },
       })
-      if (res) await handleTester(res)
+      if (systemArchitectRes.response)
+        await handleTester(systemArchitectRes.response)
     } catch (e) {
       console.error('Error generating code:', e)
     } finally {
@@ -213,18 +265,35 @@ const MessageContainer = ({
     try {
       setIsProcessing(true)
       setNextFrom(MessageRole.DEVELOPER)
-      const devRes = await developer(prompt, files, tddEnabled)
+      const devRes = await developer(
+        buildPromptWithHistory(prompt, 'assistant'),
+        mergedFiles, // ✅ pass previously merged files to context if needed
+        tddEnabled
+      )
+
+      // ✅ Merge previous + new files
+      const newFiles = devRes?.state.files ?? {}
+      const updatedFiles = { ...mergedFiles, ...files, ...newFiles }
+
+      // ✅ Update mergedFiles state
+      setMergedFiles(updatedFiles)
+
+      // ✅ Use merged result in message creation
       onCreateMessage({
         content:
           '@security_engineer code is ready. Review for security issues and vulnerabilities.',
         role: MessageRole.DEVELOPER,
+        timeTaken: devRes.time_taken_seconds,
+        totalTokens: devRes.tokens.total_tokens,
         fragment: {
           type: FragmentType.CODE,
-          files: { ...(devRes?.state.files ?? {}), ...files },
+          files: updatedFiles,
           title: 'Code',
         },
       })
-      await testCode({ ...(devRes?.state.files ?? {}), ...files })
+
+      // ✅ Use updated files for testing
+      await testCode(updatedFiles)
     } catch (e) {
       console.error('Error generating code:', e)
     } finally {
@@ -237,7 +306,7 @@ const MessageContainer = ({
     const messageContent = inputValue
     setInputValue('')
     onCreateMessage({ content: messageContent, role: MessageRole.USER })
-    handleBusinessAnalyst(messageContent)
+    handleDev(messageContent, {})
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -248,9 +317,9 @@ const MessageContainer = ({
   }
 
   return (
-    <div className="h-full flex flex-col border-r bg-white dark:bg-gray-950">
+    <div className="h-full flex flex-col border-r bg-white dark:bg-black">
       {/* Header */}
-      <div className="flex-shrink-0 sticky top-0 z-10 bg-white dark:bg-gray-950 border-b border-gray-200 dark:border-gray-700 px-4 py-4">
+      <div className="flex-shrink-0 sticky top-0 z-10 bg-white dark:bg-black border-b border-gray-200 dark:border-gray-700 px-4 py-4">
         <div className="flex items-center gap-3">
           <Link href="/">
             <Button
@@ -266,9 +335,15 @@ const MessageContainer = ({
             {headerTitle}
           </h2>
           <div className="flex items-center gap-1 ml-auto">
-            <Badge variant="secondary" className="text-xs">
-              {messages.length} messages
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="text-xs">
+                {totalMessages} messages
+              </Badge>
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                <span className="mr-2">{formatTime(totalTimeSeconds)}</span>
+                <span>{totalTokens} tokens</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -279,7 +354,7 @@ const MessageContainer = ({
           <div className="p-4 space-y-2">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center min-h-[400px]">
-                <div className="p-4 rounded-full bg-gray-100 dark:bg-gray-900 mb-4">
+                <div className="p-4 rounded-full bg-gray-100 dark:bg-black mb-4">
                   <MessageCircle className="w-8 h-8 text-gray-400 dark:text-gray-600" />
                 </div>
                 <h3 className="text-sm font-medium text-gray-950 dark:text-gray-100 mb-1">
@@ -305,7 +380,7 @@ const MessageContainer = ({
                         className={`w-8 h-8 rounded-full flex items-center justify-center ${
                           isAssistant
                             ? 'bg-gray-100 dark:bg-gray-900'
-                            : 'bg-gray-950 dark:bg-gray-100'
+                            : 'bg-black dark:bg-gray-100'
                         }`}
                       >
                         {isAssistant ? (
@@ -326,8 +401,8 @@ const MessageContainer = ({
                       <Card
                         className={`p-3 shadow-sm gap-2 ${
                           isAssistant
-                            ? 'bg-gray-50 dark:bg-gray-950 border-gray-200 dark:border-gray-700'
-                            : 'bg-gray-950 dark:bg-gray-100 border-gray-950 dark:border-gray-100'
+                            ? 'bg-gray-50 dark:bg-black border-gray-200 dark:border-gray-700'
+                            : 'bg-black dark:bg-gray-100 border-gray-950 dark:border-gray-100'
                         }`}
                       >
                         {message.content && (
@@ -447,7 +522,7 @@ const MessageContainer = ({
       </div>
 
       {/* Input */}
-      <div className="flex-shrink-0 sticky bottom-0 p-4 border-t bg-white dark:bg-gray-950">
+      <div className="flex-shrink-0 sticky bottom-0 p-4 border-t bg-white dark:bg-black">
         <div className="absolute -top-6 left-0 right-0 h-6 bg-gradient-to-b from-transparent to-background/70 pointer-events-none" />
         <div className="flex gap-2 items-end">
           <div className="flex-1 relative">
@@ -456,14 +531,14 @@ const MessageContainer = ({
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Type your message... (Press Enter to send, Shift+Enter for new line)"
-              className="w-full resize-none text-sm min-h-[64px] max-h-[120px] pr-12 bg-gray-50 dark:bg-gray-950 border-gray-200 dark:border-gray-700 rounded-sm focus:ring-0"
+              className="w-full resize-none text-sm min-h-[64px] max-h-[120px] pr-12 bg-gray-50 dark:bg-black border-gray-200 dark:border-gray-700 rounded-sm focus:ring-0"
               disabled={isProcessing}
             />
             <Button
               onClick={handleSend}
               disabled={!inputValue || isProcessing}
               size="sm"
-              className="absolute right-2 bottom-2 h-8 px-2 bg-gray-950 hover:bg-gray-900 dark:bg-gray-100 dark:hover:bg-gray-200 dark:text-gray-950"
+              className="absolute right-2 bottom-2 h-8 px-2 bg-black hover:bg-gray-900 dark:bg-gray-100 dark:hover:bg-gray-200 dark:text-gray-950"
             >
               {isMessageCreationPending || isProcessing ? (
                 <svg

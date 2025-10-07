@@ -1,70 +1,71 @@
-import React, { useState } from "react";
-import { ResizablePanel, ResizablePanelGroup } from "./ui/resizable";
-import CodeView from "./code-view/code-view";
-import { Folder, FolderOpen, File as FileIcon } from "lucide-react";
-import { ScrollArea } from "./ui/scroll-area";
+import React, { useState } from 'react'
+import { ResizablePanel, ResizablePanelGroup } from './ui/resizable'
+import CodeView from './code-view/code-view'
+import { Folder, FolderOpen, File as FileIcon } from 'lucide-react'
+import { ScrollArea } from './ui/scroll-area'
 
 interface FileCollection {
-  [path: string]: string;
+  [path: string]: string
 }
 
 interface Props {
-  files: FileCollection;
+  files: FileCollection
 }
 
 interface TreeNode {
-  name: string;
-  path: string;
-  type: "file" | "directory";
-  children?: TreeNode[];
+  name: string
+  path: string
+  type: 'file' | 'directory'
+  children?: TreeNode[]
 }
 
 const getLanguageFromExtension = (fileName: string): string => {
-  const extension = fileName.split(".").pop()?.toLowerCase();
+  const extension = fileName.split('.').pop()?.toLowerCase()
   const languageMap: { [key: string]: string } = {
-    js: "javascript",
-    jsx: "javascript",
-    ts: "typescript",
-    tsx: "typescript",
-  };
-  return languageMap[extension || ""] || "plaintext";
-};
+    js: 'javascript',
+    jsx: 'javascript',
+    ts: 'typescript',
+    tsx: 'typescript',
+    json: 'json',
+  }
+  return languageMap[extension || ''] || 'plaintext'
+}
 
 const buildFileTree = (files: FileCollection): TreeNode[] => {
   type InternalTreeNode = {
-    name: string;
-    path: string;
-    type: "file" | "directory";
-    children?: { [key: string]: InternalTreeNode };
-  };
+    name: string
+    path: string
+    type: 'file' | 'directory'
+    children?: { [key: string]: InternalTreeNode }
+  }
 
-  const root: { [key: string]: InternalTreeNode } = {};
+  const root: { [key: string]: InternalTreeNode } = {}
 
   Object.keys(files).forEach((path) => {
-    const parts = path.split("/").filter((part) => part.length > 0);
-    let current = root;
+    const parts = path.split('/').filter((part) => part.length > 0)
+    let current = root
 
     parts.forEach((part, index) => {
-      const isLast = index === parts.length - 1;
-      const currentPath = parts.slice(0, index + 1).join("/");
+      const isLast = index === parts.length - 1
+      const currentPath = parts.slice(0, index + 1).join('/')
 
       if (!current[part]) {
         current[part] = {
           name: part,
           path: currentPath,
-          type: isLast ? "file" : "directory",
+          type: isLast ? 'file' : 'directory',
           children: isLast ? undefined : {},
-        };
+        }
       }
 
       if (!isLast && current[part].children) {
-        current = current[part].children as { [key: string]: InternalTreeNode };
+        current = current[part].children as { [key: string]: InternalTreeNode }
       }
-    });
-  });
+    })
+  })
 
   const convertToArray = (nodes: {
-    [key: string]: InternalTreeNode;
+    [key: string]: InternalTreeNode
   }): TreeNode[] => {
     return Object.values(nodes)
       .map((node) => ({
@@ -75,31 +76,31 @@ const buildFileTree = (files: FileCollection): TreeNode[] => {
       }))
       .sort((a, b) => {
         if (a.type !== b.type) {
-          return a.type === "directory" ? -1 : 1;
+          return a.type === 'directory' ? -1 : 1
         }
-        return a.name.localeCompare(b.name);
-      });
-  };
+        return a.name.localeCompare(b.name)
+      })
+  }
 
-  return convertToArray(root);
-};
+  return convertToArray(root)
+}
 
 const TreeItem: React.FC<{
-  node: TreeNode;
-  selectedFile: string | null;
-  onSelect: (path: string) => void;
-  level: number;
+  node: TreeNode
+  selectedFile: string | null
+  onSelect: (path: string) => void
+  level: number
 }> = ({ node, selectedFile, onSelect, level }) => {
-  const [isExpanded, setIsExpanded] = useState(level < 1);
-  const isSelected = selectedFile === node.path;
+  const [isExpanded, setIsExpanded] = useState(level < 1)
+  const isSelected = selectedFile === node.path
 
   const handleClick = () => {
-    if (node.type === "file") {
-      onSelect(node.path);
+    if (node.type === 'file') {
+      onSelect(node.path)
     } else {
-      setIsExpanded(!isExpanded);
+      setIsExpanded(!isExpanded)
     }
-  };
+  }
 
   return (
     <div>
@@ -108,18 +109,18 @@ const TreeItem: React.FC<{
           transition-colors duration-100 ease-in-out
           ${
             isSelected
-              ? "bg-gray-950/30 dark:bg-gray-700/40 font-semibold"
-              : "hover:bg-gray-200/50 dark:hover:bg-gray-950/50"
+              ? 'bg-gray-950/30 dark:bg-gray-700/40 font-semibold'
+              : 'hover:bg-gray-200/50 dark:hover:bg-gray-950/50'
           }
           ${
             isSelected
-              ? "text-gray-900 dark:text-gray-100"
-              : "text-gray-700 dark:text-gray-300"
+              ? 'text-gray-900 dark:text-gray-100'
+              : 'text-gray-700 dark:text-gray-300'
           }`}
         style={{ paddingLeft: `${level * 12 + 8}px` }}
         onClick={handleClick}
       >
-        {node.type === "directory" ? (
+        {node.type === 'directory' ? (
           isExpanded ? (
             <FolderOpen
               size={16}
@@ -140,10 +141,10 @@ const TreeItem: React.FC<{
         <span className="truncate font-mono">{node.name}</span>
       </div>
 
-      {node.type === "directory" && (
+      {node.type === 'directory' && (
         <div
           className={`overflow-hidden transition-all duration-200 ease-in-out`}
-          style={{ maxHeight: isExpanded ? "1000px" : "0px" }}
+          style={{ maxHeight: isExpanded ? '1000px' : '0px' }}
         >
           {node.children &&
             node.children.map((child) => (
@@ -158,20 +159,20 @@ const TreeItem: React.FC<{
         </div>
       )}
     </div>
-  );
-};
+  )
+}
 
 const FileExplorer = ({ files }: Props) => {
   const [selectedFile, setSelectedFile] = useState<string | null>(() => {
-    const fileKeys = Object.keys(files);
-    return fileKeys.length > 0 ? fileKeys[0] : null;
-  });
+    const fileKeys = Object.keys(files)
+    return fileKeys.length > 0 ? fileKeys[0] : null
+  })
 
-  const fileTree = buildFileTree(files);
-  const selectedContent = selectedFile ? files[selectedFile] || "" : "";
+  const fileTree = buildFileTree(files)
+  const selectedContent = selectedFile ? files[selectedFile] || '' : ''
   const selectedLanguage = selectedFile
     ? getLanguageFromExtension(selectedFile)
-    : "plaintext";
+    : 'plaintext'
 
   return (
     <div
@@ -226,7 +227,7 @@ const FileExplorer = ({ files }: Props) => {
                   border-b border-gray-200 dark:border-gray-950 px-3 flex items-center gap-2 py-4.5"
                 >
                   <span className="text-sm font-mono text-gray-800 dark:text-gray-200">
-                    {selectedFile.split("/").pop() || selectedFile}
+                    {selectedFile.split('/').pop() || selectedFile}
                   </span>
                   <span className="ml-auto text-xs text-gray-500 dark:text-gray-400 font-mono">
                     {selectedLanguage}
@@ -257,7 +258,7 @@ const FileExplorer = ({ files }: Props) => {
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>
-  );
-};
+  )
+}
 
-export default FileExplorer;
+export default FileExplorer

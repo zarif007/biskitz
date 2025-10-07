@@ -2,8 +2,14 @@
 
 import axios from 'axios'
 
+interface LLMConversation {
+  type: string
+  role: string
+  content: string
+}
+
 const developer = async (
-  prompt: string,
+  conversation: LLMConversation[],
   currentFolder: { [path: string]: string },
   tddEnabled: boolean
 ) => {
@@ -11,7 +17,7 @@ const developer = async (
     const response = await axios.post(
       `${process.env.AGENTS_API_BASE_URL}/agents/developer`,
       {
-        prompt,
+        conversation,
         current_folder: currentFolder,
         tdd_enabled: tddEnabled,
       },
