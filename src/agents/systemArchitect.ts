@@ -8,11 +8,14 @@ interface LLMConversation {
   content: string
 }
 
-const systemArchitect = async (conversation: LLMConversation[]) => {
+const systemArchitect = async (
+  conversation: LLMConversation[],
+  model: string
+) => {
   try {
     const response = await axios.post(
       `${process.env.AGENTS_API_BASE_URL}/agents/system-architect`,
-      { conversation },
+      { conversation, model },
       {
         headers: {
           Authorization: `Bearer ${process.env.AGENT_API_KEY}`,

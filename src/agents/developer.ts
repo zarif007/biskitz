@@ -11,7 +11,8 @@ interface LLMConversation {
 const developer = async (
   conversation: LLMConversation[],
   currentFolder: { [path: string]: string },
-  tddEnabled: boolean
+  tddEnabled: boolean,
+  model: string
 ) => {
   try {
     const response = await axios.post(
@@ -20,6 +21,7 @@ const developer = async (
         conversation,
         current_folder: currentFolder,
         tdd_enabled: tddEnabled,
+        model,
       },
       {
         headers: {

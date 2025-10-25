@@ -17,6 +17,7 @@ import { Label } from '@/components/ui/label'
 import { useTRPC } from '@/trpc/client'
 import { useMutation } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
+import ModelSelector from './ModelSelector'
 
 const PromptInput = () => {
   const trpc = useTRPC()
@@ -28,6 +29,7 @@ const PromptInput = () => {
     'NPM'
   )
   const [tddEnabled, setTddEnabled] = useState(false)
+  const [modelType, setModelType] = useState<'HIGH' | 'MID'>('MID')
 
   const onGenerate = async (input: string) => {
     if (!input) return
@@ -38,6 +40,10 @@ const PromptInput = () => {
         value: input,
         packageType,
         tddEnabled,
+        model: modelType,
+        inputTokens: 0,
+        outputTokens: 0,
+        timeTaken: 0,
       })
       router.push(`/projects/${res.id}`)
     } catch (error) {
@@ -148,6 +154,12 @@ const PromptInput = () => {
                   </SelectItem>
                 </SelectContent>
               </Select>
+
+              <ModelSelector
+                setModelType={setModelType}
+                disabled={false}
+                defaultValue={modelType}
+              />
 
               <div className="flex items-center gap-2 pr-1 ">
                 <Switch

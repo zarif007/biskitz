@@ -3,6 +3,7 @@ import { baseProcedure, createTRPCRouter } from '@/trpc/init'
 import prisma from '@/lib/db'
 import { generateSlug } from 'random-word-slugs'
 import { TRPCError } from '@trpc/server'
+import { time } from 'console'
 
 export const projectsRouter = createTRPCRouter({
   getOne: baseProcedure
@@ -51,6 +52,10 @@ export const projectsRouter = createTRPCRouter({
           .max(5000, 'Prompt is too long'),
         packageType: z.enum(['NPM', 'COMPONENT', 'SDK']).default('NPM'),
         tddEnabled: z.boolean().default(false),
+        inputTokens: z.number().min(0).default(0),
+        outputTokens: z.number().min(0).default(0),
+        timeTaken: z.number().min(0).default(0),
+        model: z.string(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -74,8 +79,10 @@ export const projectsRouter = createTRPCRouter({
               content: input.value,
               role: 'USER',
               type: 'RESULT',
-              timeTaken: 0,
-              totalTokens: 0,
+              timeTaken: input.timeTaken,
+              inputTokens: input.inputTokens,
+              outputTokens: input.outputTokens,
+              model: input.model,
             },
           },
         },

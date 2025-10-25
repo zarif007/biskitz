@@ -16,7 +16,9 @@ model Message {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   projectId   String
-  totalTokens Int
+  inputTokens Int
+  outputTokens Int
+  model String
   timeTaken   Int
   fragment    Fragment?
   project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)

@@ -1,8 +1,23 @@
-import React, { useState } from 'react'
-import { ResizablePanel, ResizablePanelGroup } from './ui/resizable'
+'use client'
+
+import type React from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import {
+  ResizablePanel,
+  ResizablePanelGroup,
+  ResizableHandle,
+} from './ui/resizable'
 import CodeView from './code-view/code-view'
-import { Folder, FolderOpen, File as FileIcon } from 'lucide-react'
+import {
+  Folder,
+  FolderOpen,
+  FileIcon,
+  X,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react'
 import { ScrollArea } from './ui/scroll-area'
+import { Button } from './ui/button'
 
 interface FileCollection {
   [path: string]: string
@@ -20,29 +35,32 @@ interface TreeNode {
 }
 
 const getLanguageFromExtension = (fileName: string): string => {
-  const extension = fileName.split('.').pop()?.toLowerCase()
-  const languageMap: { [key: string]: string } = {
+  const ext = fileName.split('.').pop()?.toLowerCase()
+  const map: Record<string, string> = {
     js: 'javascript',
     jsx: 'javascript',
     ts: 'typescript',
     tsx: 'typescript',
     json: 'json',
+    html: 'html',
+    css: 'css',
+    md: 'markdown',
   }
-  return languageMap[extension || ''] || 'plaintext'
+  return map[ext || ''] || 'plaintext'
 }
 
 const buildFileTree = (files: FileCollection): TreeNode[] => {
-  type InternalTreeNode = {
+  type Internal = {
     name: string
     path: string
     type: 'file' | 'directory'
-    children?: { [key: string]: InternalTreeNode }
+    children?: Record<string, Internal>
   }
 
-  const root: { [key: string]: InternalTreeNode } = {}
+  const root: Record<string, Internal> = {}
 
   Object.keys(files).forEach((path) => {
-    const parts = path.split('/').filter((part) => part.length > 0)
+    const parts = path.split('/').filter(Boolean)
     let current = root
 
     parts.forEach((part, index) => {
@@ -59,103 +77,86 @@ const buildFileTree = (files: FileCollection): TreeNode[] => {
       }
 
       if (!isLast && current[part].children) {
-        current = current[part].children as { [key: string]: InternalTreeNode }
+        current = current[part].children
       }
     })
   })
 
-  const convertToArray = (nodes: {
-    [key: string]: InternalTreeNode
-  }): TreeNode[] => {
-    return Object.values(nodes)
-      .map((node) => ({
-        name: node.name,
-        path: node.path,
-        type: node.type,
-        children: node.children ? convertToArray(node.children) : undefined,
+  const convert = (nodes: Record<string, Internal>): TreeNode[] =>
+    Object.values(nodes)
+      .map((n) => ({
+        name: n.name,
+        path: n.path,
+        type: n.type,
+        children: n.children ? convert(n.children) : undefined,
       }))
-      .sort((a, b) => {
-        if (a.type !== b.type) {
-          return a.type === 'directory' ? -1 : 1
-        }
-        return a.name.localeCompare(b.name)
-      })
-  }
+      .sort((a, b) =>
+        a.type === b.type
+          ? a.name.localeCompare(b.name)
+          : a.type === 'directory'
+          ? -1
+          : 1
+      )
 
-  return convertToArray(root)
+  return convert(root)
 }
 
 const TreeItem: React.FC<{
   node: TreeNode
-  selectedFile: string | null
   onSelect: (path: string) => void
+  selectedFile: string | null
   level: number
-}> = ({ node, selectedFile, onSelect, level }) => {
-  const [isExpanded, setIsExpanded] = useState(level < 1)
+}> = ({ node, onSelect, selectedFile, level }) => {
+  const [expanded, setExpanded] = useState(level < 1)
   const isSelected = selectedFile === node.path
 
   const handleClick = () => {
-    if (node.type === 'file') {
-      onSelect(node.path)
-    } else {
-      setIsExpanded(!isExpanded)
-    }
+    if (node.type === 'file') onSelect(node.path)
+    else setExpanded(!expanded)
   }
 
   return (
     <div>
       <div
-        className={`flex items-center h-7 px-2 cursor-pointer text-[14px] select-none
-          transition-colors duration-100 ease-in-out
+        className={`flex items-center h-7 px-2 cursor-pointer text-xs font-mono select-none
           ${
             isSelected
-              ? 'bg-gray-950/30 dark:bg-gray-700/40 font-semibold'
-              : 'hover:bg-gray-200/50 dark:hover:bg-gray-950/50'
+              ? 'bg-blue-600/20 dark:bg-blue-500/20 font-medium'
+              : 'hover:bg-gray-200/40 dark:hover:bg-white/5'
           }
-          ${
-            isSelected
-              ? 'text-gray-900 dark:text-gray-100'
-              : 'text-gray-700 dark:text-gray-300'
-          }`}
+          ${isSelected ? 'text-blue-400' : 'text-gray-700 dark:text-gray-300'}`}
         style={{ paddingLeft: `${level * 12 + 8}px` }}
         onClick={handleClick}
       >
         {node.type === 'directory' ? (
-          isExpanded ? (
-            <FolderOpen
-              size={16}
-              className="mr-1.5 text-gray-600 dark:text-gray-300"
-            />
+          expanded ? (
+            <ChevronDown size={14} className="mr-1 text-gray-500" />
           ) : (
-            <Folder
-              size={16}
-              className="mr-1.5 text-gray-600 dark:text-gray-300"
-            />
+            <ChevronRight size={14} className="mr-1 text-gray-500" />
           )
         ) : (
-          <FileIcon
-            size={16}
-            className="mr-1.5 text-gray-500 dark:text-gray-400"
-          />
+          <FileIcon size={14} className="mr-1 text-gray-400" />
         )}
-        <span className="truncate font-mono">{node.name}</span>
+        {node.type === 'directory' ? (
+          expanded ? (
+            <FolderOpen size={14} className="mr-1 text-blue-500" />
+          ) : (
+            <Folder size={14} className="mr-1 text-blue-500" />
+          )
+        ) : null}
+        <span className="truncate font-medium text-sm">{node.name}</span>
       </div>
-
-      {node.type === 'directory' && (
-        <div
-          className={`overflow-hidden transition-all duration-200 ease-in-out`}
-          style={{ maxHeight: isExpanded ? '1000px' : '0px' }}
-        >
-          {node.children &&
-            node.children.map((child) => (
-              <TreeItem
-                key={child.path}
-                node={child}
-                selectedFile={selectedFile}
-                onSelect={onSelect}
-                level={level + 1}
-              />
-            ))}
+      {node.type === 'directory' && expanded && node.children && (
+        <div className="transition-all">
+          {node.children.map((child) => (
+            <TreeItem
+              key={child.path}
+              node={child}
+              onSelect={onSelect}
+              selectedFile={selectedFile}
+              level={level + 1}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -163,53 +164,55 @@ const TreeItem: React.FC<{
 }
 
 const FileExplorer = ({ files }: Props) => {
-  const [selectedFile, setSelectedFile] = useState<string | null>(() => {
-    const fileKeys = Object.keys(files)
-    return fileKeys.length > 0 ? fileKeys[0] : null
-  })
+  const [selectedFile, setSelectedFile] = useState<string | null>(null)
+  const [openTabs, setOpenTabs] = useState<string[]>([])
 
-  const fileTree = buildFileTree(files)
-  const selectedContent = selectedFile ? files[selectedFile] || '' : ''
+  const fileTree = useMemo(() => buildFileTree(files), [files])
+
+  useEffect(() => {
+    const firstFile = Object.keys(files)[0]
+    if (firstFile) {
+      setSelectedFile(firstFile)
+      setOpenTabs([firstFile])
+    }
+  }, [files])
+
+  const openFile = (path: string) => {
+    setSelectedFile(path)
+    if (!openTabs.includes(path)) setOpenTabs([...openTabs, path])
+  }
+
+  const closeTab = (path: string) => {
+    const newTabs = openTabs.filter((t) => t !== path)
+    setOpenTabs(newTabs)
+    if (selectedFile === path)
+      setSelectedFile(newTabs[newTabs.length - 1] || null)
+  }
+
+  const selectedContent = selectedFile ? files[selectedFile] : ''
   const selectedLanguage = selectedFile
     ? getLanguageFromExtension(selectedFile)
     : 'plaintext'
+  const breadcrumb = selectedFile ? selectedFile.split('/').join(' ▸ ') : ''
 
   return (
-    <div
-      className="h-full bg-gray-100 dark:bg-gray-950 overflow-hidden 
-      border border-gray-300 dark:border-gray-950 shadow font-sans"
-    >
+    <div className="h-full bg-white dark:bg-black overflow-hidden border border-y-0 border-gray-200 dark:border-gray-700 font-sans">
       <ResizablePanelGroup direction="horizontal">
-        <ResizablePanel
-          defaultSize={20}
-          minSize={15}
-          maxSize={35}
-          className="bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-950"
-        >
+        <ResizablePanel defaultSize={22} minSize={15} maxSize={35}>
           <div className="h-full flex flex-col">
-            <div
-              className="h-8 bg-gray-100 dark:bg-gray-950 
-              border-b border-gray-200 dark:border-gray-950 px-2.5 flex items-center py-4.5"
-            >
-              <span
-                className="text-sm font-semibold text-gray-700 dark:text-gray-300 
-                uppercase tracking-wide"
-              >
+            <div className="h-10 flex items-center justify-between border-b border-gray-200 dark:border-gray-700 px-2">
+              <span className="h-10 p-2 text-sm font-bold text-gray-700 dark:text-gray-300 uppercase">
                 Explorer
               </span>
             </div>
-            <div
-              className="flex-1 overflow-auto scrollbar-thin 
-              scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-700 
-              scrollbar-track-gray-100 dark:scrollbar-track-gray-900"
-            >
-              <div className="py-1.5">
+            <div className="flex-1 overflow-auto">
+              <div className="py-1 min-h-full">
                 {fileTree.map((node) => (
                   <TreeItem
                     key={node.path}
                     node={node}
+                    onSelect={openFile}
                     selectedFile={selectedFile}
-                    onSelect={setSelectedFile}
                     level={0}
                   />
                 ))}
@@ -218,22 +221,42 @@ const FileExplorer = ({ files }: Props) => {
           </div>
         </ResizablePanel>
 
-        <ResizablePanel defaultSize={80} minSize={65}>
-          <div className="h-full bg-gray-100 dark:bg-gray-950 flex flex-col">
+        <ResizableHandle className="w-1 bg-gray-200 hover:bg-gray-300 dark:bg-gray-950 dark:hover:bg-gray-700 transition-colors" />
+
+        <ResizablePanel defaultSize={78} minSize={65}>
+          <div className="h-full flex flex-col">
+            <div className="h-10 flex items-center bg-white dark:bg-black border-0 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex overflow-x-auto whitespace-nowrap">
+                {openTabs.map((tab) => (
+                  <div
+                    key={tab}
+                    className={`flex items-center px-4 py-2 cursor-pointer text-xs font-mono transition-colors duration-150 border-gray-200 dark:border-gray-700
+                      ${
+                        selectedFile === tab
+                          ? 'bg-gray-100 dark:bg-gray-950 text-blue-400 rounded font-medium'
+                          : 'text-gray-500 hover:bg-gray-200/60 dark:hover:bg-gray-800/60'
+                      }`}
+                    onClick={() => setSelectedFile(tab)}
+                  >
+                    <span className="truncate max-w-[150px]">
+                      {tab.split('/').pop()}
+                    </span>
+                    <X
+                      size={12}
+                      className="ml-2 opacity-60 hover:opacity-100 flex-shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        closeTab(tab)
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {selectedFile ? (
               <>
-                <div
-                  className="h-9 bg-gray-50 dark:bg-gray-950 
-                  border-b border-gray-200 dark:border-gray-950 px-3 flex items-center gap-2 py-4.5"
-                >
-                  <span className="text-sm font-mono text-gray-800 dark:text-gray-200">
-                    {selectedFile.split('/').pop() || selectedFile}
-                  </span>
-                  <span className="ml-auto text-xs text-gray-500 dark:text-gray-400 font-mono">
-                    {selectedLanguage}
-                  </span>
-                </div>
-                <div className="flex-1 overflow-hidden bg-gray-100 dark:bg-gray-950">
+                <div className="flex-1 overflow-hidden">
                   <ScrollArea className="h-full w-full">
                     <div className="min-w-max">
                       <CodeView
@@ -243,14 +266,15 @@ const FileExplorer = ({ files }: Props) => {
                     </div>
                   </ScrollArea>
                 </div>
+                <div className="h-6 bg-gray-100 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-3 flex items-center text-[10px] font-mono text-gray-600 dark:text-gray-400 truncate">
+                  {breadcrumb || 'No file selected'}
+                </div>
               </>
             ) : (
-              <div className="h-full flex items-center justify-center bg-gray-100 dark:bg-gray-950">
+              <div className="flex-1 flex items-center justify-center text-gray-500 dark:text-gray-400">
                 <div className="text-center opacity-60">
-                  <div className="text-5xl mb-2">📂</div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">
-                    Select a file to view its contents
-                  </p>
+                  <div className="text-5xl mb-3">📂</div>
+                  <p className="text-sm">Select a file to view its contents</p>
                 </div>
               </div>
             )}

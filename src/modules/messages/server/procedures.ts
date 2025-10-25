@@ -39,8 +39,10 @@ export const messageRouter = createTRPCRouter({
         role: z.nativeEnum(MessageRole),
         type: z.nativeEnum(MessageType),
         fragment: FragmentSchema.optional(),
-        totalTokens: z.number().min(0),
+        inputTokens: z.number().min(0),
+        outputTokens: z.number().min(0),
         timeTaken: z.number().min(0),
+        model: z.string(),
       })
     )
     .mutation(async ({ input }) => {
@@ -50,7 +52,9 @@ export const messageRouter = createTRPCRouter({
           content: input.content,
           role: input.role,
           type: input.type,
-          totalTokens: input.totalTokens,
+          inputTokens: input.inputTokens,
+          outputTokens: input.outputTokens,
+          model: input.model,
           timeTaken: input.timeTaken,
           fragment: input.fragment
             ? {

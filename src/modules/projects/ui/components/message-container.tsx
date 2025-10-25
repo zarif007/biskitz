@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react'
+import React, { useEffect, useRef, useState, useMemo, use } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -31,6 +31,9 @@ import developer from '@/agents/developer'
 import tester from '@/agents/tester'
 import { runTestsInWebContainer } from '@/utils/runTestsInWebContainer'
 import convertToOpenAIFormatWithFilter from '@/utils/convertToAIFormat'
+import ModelSelector from '@/components/ModelSelector'
+import modelMapper from '@/utils/modelMapper'
+import Usage from './usage'
 
 interface Message {
   role: MessageRole
@@ -39,7 +42,9 @@ interface Message {
   fragment: Fragment | null
   type: MessageType
   id?: string
-  totalTokens?: number
+  inputTokens: number
+  outputTokens: number
+  model: string
   timeTaken?: number
 }
 
@@ -49,8 +54,10 @@ interface Props {
   onCreateMessage: (msg: {
     content: string
     role: MessageRole
-    totalTokens?: number
-    timeTaken?: number
+    timeTaken: number
+    inputTokens: number
+    outputTokens: number
+    model: string
     fragment?: {
       type: FragmentType
       title: string
@@ -83,18 +90,33 @@ const MessageContainer = ({
   )
   const [mergedFiles, setMergedFiles] = useState<{ [path: string]: string }>({})
   const hasProcessedInitialMessage = useRef(false)
+  const [modelType, setModelType] = useState<'HIGH' | 'MID'>('MID')
 
-  const { totalMessages, totalTimeSeconds, totalTokens } = useMemo(() => {
+  const {
+    totalMessages,
+    totalTimeSeconds,
+    totalInputTokens,
+    totalOutputTokens,
+  } = useMemo(() => {
     const totalMessages = messages.length
     const totalTimeSeconds = messages.reduce(
       (acc, m) => acc + (m.timeTaken || 0),
       0
     )
-    const totalTokens = messages.reduce(
-      (acc, m) => acc + (m.totalTokens || 0),
+    const totalInputTokens = messages.reduce(
+      (acc, m) => acc + (m.inputTokens || 0),
       0
     )
-    return { totalMessages, totalTimeSeconds, totalTokens }
+    const totalOutputTokens = messages.reduce(
+      (acc, m) => acc + (m.outputTokens || 0),
+      0
+    )
+    return {
+      totalMessages,
+      totalTimeSeconds,
+      totalInputTokens,
+      totalOutputTokens,
+    }
   }, [messages])
 
   const formatTime = (seconds: number) => {
@@ -131,6 +153,13 @@ const MessageContainer = ({
     const lastAssistantMessage = messages.findLast(
       (m) => m.role !== MessageRole.USER
     )
+
+    const lastUserMessage = messages.findLast(
+      (m) => m.role === MessageRole.USER
+    )
+
+    setModelType(() => lastUserMessage?.model as 'HIGH' | 'MID')
+
     if (lastAssistantMessage?.fragment) {
       onFragmentClicked(lastAssistantMessage.fragment)
     }
@@ -143,6 +172,7 @@ const MessageContainer = ({
 
     // Need to introduce level instead of going role by role as a role may appear multiple times
     // Also need to add version no. for each agent
+    // Need to introduce product manager role to manage the entire flow
     if (lastMessage?.role === MessageRole.USER) {
       handleBusinessAnalyst(lastMessage.content)
       hasProcessedInitialMessage.current = true
@@ -170,8 +200,8 @@ const MessageContainer = ({
     )
   }
 
-  const buildPromptWithHistory = (newPrompt: string, role: string) => {
-    const relevantMessages = convertToOpenAIFormatWithFilter(messages)
+  const buildPromptWithHistory = async (newPrompt: string, role: string) => {
+    const relevantMessages = await convertToOpenAIFormatWithFilter(messages)
 
     return [...relevantMessages, { type: 'text', role, content: newPrompt }]
   }
@@ -181,14 +211,17 @@ const MessageContainer = ({
       setIsProcessing(true)
       setNextFrom(MessageRole.BUSINESS_ANALYST)
       const businessAnalystRes = await businessAnalyst(
-        buildPromptWithHistory(prompt, 'assistant')
+        await buildPromptWithHistory(prompt, 'assistant'),
+        modelMapper(modelType, 'THINK')
       )
       onCreateMessage({
         content:
           '@sys_arch here’s the requirement. Design the system architecture and define the key modules.',
         role: MessageRole.BUSINESS_ANALYST,
         timeTaken: businessAnalystRes.time_taken_seconds,
-        totalTokens: businessAnalystRes.tokens.total_tokens,
+        inputTokens: businessAnalystRes.tokens.input_tokens,
+        outputTokens: businessAnalystRes.tokens.output_tokens,
+        model: modelMapper(modelType, 'THINK'),
         fragment: {
           type: FragmentType.DOC,
           files: { ['Analysis Report']: businessAnalystRes.response ?? '' },
@@ -209,14 +242,17 @@ const MessageContainer = ({
       setIsProcessing(true)
       setNextFrom(MessageRole.SYSTEM_ARCHITECT)
       const systemArchitectRes = await systemArchitect(
-        buildPromptWithHistory(prompt, 'assistant')
+        await buildPromptWithHistory(prompt, 'assistant'),
+        modelMapper(modelType, 'THINK')
       )
       onCreateMessage({
         content:
           '@dev here’s the system design. Implement it as a complete NPM package.',
         role: MessageRole.SYSTEM_ARCHITECT,
         timeTaken: systemArchitectRes.time_taken_seconds,
-        totalTokens: systemArchitectRes.tokens.total_tokens,
+        inputTokens: systemArchitectRes.tokens.input_tokens,
+        outputTokens: systemArchitectRes.tokens.output_tokens,
+        model: modelMapper(modelType, 'THINK'),
         fragment: {
           type: FragmentType.DOC,
           files: { ['System Architecture']: systemArchitectRes.response ?? '' },
@@ -241,6 +277,10 @@ const MessageContainer = ({
         onCreateMessage({
           content: '',
           role: MessageRole.TESTER,
+          timeTaken: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          model: '',
           fragment: {
             type: FragmentType.CODE,
             files: testerRes?.state.files ?? {},
@@ -266,25 +306,25 @@ const MessageContainer = ({
       setIsProcessing(true)
       setNextFrom(MessageRole.DEVELOPER)
       const devRes = await developer(
-        buildPromptWithHistory(prompt, 'assistant'),
-        mergedFiles, // ✅ pass previously merged files to context if needed
-        tddEnabled
+        await buildPromptWithHistory(prompt, 'assistant'),
+        mergedFiles,
+        tddEnabled,
+        modelMapper(modelType, 'DEV')
       )
 
-      // ✅ Merge previous + new files
       const newFiles = devRes?.state.files ?? {}
       const updatedFiles = { ...mergedFiles, ...files, ...newFiles }
 
-      // ✅ Update mergedFiles state
       setMergedFiles(updatedFiles)
 
-      // ✅ Use merged result in message creation
       onCreateMessage({
         content:
           '@security_engineer code is ready. Review for security issues and vulnerabilities.',
         role: MessageRole.DEVELOPER,
         timeTaken: devRes.time_taken_seconds,
-        totalTokens: devRes.tokens.total_tokens,
+        inputTokens: devRes.tokens.input_tokens,
+        outputTokens: devRes.tokens.output_tokens,
+        model: modelMapper(modelType, 'DEV'),
         fragment: {
           type: FragmentType.CODE,
           files: updatedFiles,
@@ -292,7 +332,6 @@ const MessageContainer = ({
         },
       })
 
-      // ✅ Use updated files for testing
       await testCode(updatedFiles)
     } catch (e) {
       console.error('Error generating code:', e)
@@ -305,7 +344,14 @@ const MessageContainer = ({
     if (!inputValue) return
     const messageContent = inputValue
     setInputValue('')
-    onCreateMessage({ content: messageContent, role: MessageRole.USER })
+    onCreateMessage({
+      content: messageContent,
+      role: MessageRole.USER,
+      timeTaken: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      model: modelType,
+    })
     handleDev(messageContent, {})
   }
 
@@ -317,15 +363,15 @@ const MessageContainer = ({
   }
 
   return (
-    <div className="h-full flex flex-col border-r bg-white dark:bg-black">
+    <div className="h-full flex flex-col border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-black">
       {/* Header */}
-      <div className="flex-shrink-0 sticky top-0 z-10 bg-white dark:bg-black border-b border-gray-200 dark:border-gray-700 px-4 py-4">
+      <div className="h-10 flex-shrink-0 sticky top-0 z-10 bg-white dark:bg-black border-b border-gray-200 dark:border-gray-700 p-2">
         <div className="flex items-center gap-3">
           <Link href="/">
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 w-8 p-0 hover:bg-gray-100 dark:hover:bg-gray-800"
+              className="h-4 w-4 p-0 hover:bg-gray-100 dark:hover:bg-gray-800"
             >
               <ArrowLeft className="h-4 w-4" />
               <span className="sr-only">Go back</span>
@@ -339,9 +385,9 @@ const MessageContainer = ({
               <Badge variant="secondary" className="text-xs">
                 {totalMessages} messages
               </Badge>
-              <div className="text-xs text-gray-500 dark:text-gray-400">
-                <span className="mr-2">{formatTime(totalTimeSeconds)}</span>
-                <span>{totalTokens} tokens</span>
+              <div className="text-xs flex text-gray-500 dark:text-gray-400">
+                <div className="mr-2">{formatTime(totalTimeSeconds)}</div>
+                <Usage messages={messages} />
               </div>
             </div>
           </div>
@@ -522,7 +568,7 @@ const MessageContainer = ({
       </div>
 
       {/* Input */}
-      <div className="flex-shrink-0 sticky bottom-0 p-4 border-t bg-white dark:bg-black">
+      <div className="flex-shrink-0 sticky bottom-0 p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-black">
         <div className="absolute -top-6 left-0 right-0 h-6 bg-gradient-to-b from-transparent to-background/70 pointer-events-none" />
         <div className="flex gap-2 items-end">
           <div className="flex-1 relative">
@@ -531,9 +577,18 @@ const MessageContainer = ({
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Type your message... (Press Enter to send, Shift+Enter for new line)"
-              className="w-full resize-none text-sm min-h-[64px] max-h-[120px] pr-12 bg-gray-50 dark:bg-black border-gray-200 dark:border-gray-700 rounded-sm focus:ring-0"
+              className="w-full resize-none text-sm min-h-[80px] max-h-[120px] bg-gray-50 dark:bg-black border-gray-200 dark:border-gray-700 rounded-md focus:ring-0"
               disabled={isProcessing}
             />
+
+            <div className="absolute left-2 bottom-2 flex items-center">
+              <ModelSelector
+                setModelType={setModelType}
+                disabled={isProcessing}
+                defaultValue={modelType}
+              />
+            </div>
+
             <Button
               onClick={handleSend}
               disabled={!inputValue || isProcessing}
