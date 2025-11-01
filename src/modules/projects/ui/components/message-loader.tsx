@@ -10,6 +10,8 @@ const MessageLoader = ({ type }: { type: MessageRole }) => {
     SYSTEM: 'bg-gradient-to-br from-slate-500 via-gray-600 to-zinc-700',
     BUSINESS_ANALYST:
       'bg-gradient-to-br from-emerald-400 via-teal-500 to-cyan-600',
+    PROJECT_MANAGER:
+      'bg-gradient-to-br from-yellow-400 via-orange-500 to-red-600',
     SYSTEM_ARCHITECT:
       'bg-gradient-to-br from-indigo-500 via-blue-600 to-purple-700',
     DEVELOPER: 'bg-gradient-to-br from-orange-400 via-red-500 to-pink-600',
@@ -24,6 +26,7 @@ const MessageLoader = ({ type }: { type: MessageRole }) => {
     ASSISTANT: ['Assistant is generating response'],
     SYSTEM: ['System is managing system'],
     BUSINESS_ANALYST: ['Business Analyst is analyzing requirements'],
+    PROJECT_MANAGER: ['Project Manager is planning the project'],
     SYSTEM_ARCHITECT: ['System Architect is designing architecture'],
     DEVELOPER: ['Developer is writing code'],
     TESTER: ['Tester is writing testing functionality'],

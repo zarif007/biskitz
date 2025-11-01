@@ -11,13 +11,12 @@ import CodeView from './code-view/code-view'
 import {
   Folder,
   FolderOpen,
-  FileIcon,
+  File,
   X,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react'
 import { ScrollArea } from './ui/scroll-area'
-import { Button } from './ui/button'
 
 interface FileCollection {
   [path: string]: string
@@ -25,6 +24,7 @@ interface FileCollection {
 
 interface Props {
   files: FileCollection
+  prevFiles?: FileCollection
 }
 
 interface TreeNode {
@@ -32,6 +32,8 @@ interface TreeNode {
   path: string
   type: 'file' | 'directory'
   children?: TreeNode[]
+  added?: number
+  deleted?: number
 }
 
 const getLanguageFromExtension = (fileName: string): string => {
@@ -49,17 +51,63 @@ const getLanguageFromExtension = (fileName: string): string => {
   return map[ext || ''] || 'plaintext'
 }
 
-const buildFileTree = (files: FileCollection): TreeNode[] => {
+const calculateLineDiff = (
+  currentContent?: string,
+  prevContent?: string
+): { added: number; deleted: number } => {
+  if (!prevContent && currentContent) {
+    return { added: currentContent.split('\n').length, deleted: 0 }
+  }
+  if (prevContent && !currentContent) {
+    return { added: 0, deleted: prevContent.split('\n').length }
+  }
+  if (!prevContent && !currentContent) return { added: 0, deleted: 0 }
+
+  const currentLines = currentContent!.split('\n')
+  const prevLines = prevContent!.split('\n')
+
+  let added = 0
+  let deleted = 0
+
+  const maxLen = Math.max(currentLines.length, prevLines.length)
+  for (let i = 0; i < maxLen; i++) {
+    const cur = currentLines[i]
+    const prev = prevLines[i]
+    if (cur !== prev) {
+      if (cur === undefined) deleted++
+      else if (prev === undefined) added++
+      else {
+        added++
+        deleted++
+      }
+    }
+  }
+
+  return { added, deleted }
+}
+
+const buildFileTree = (
+  files: FileCollection,
+  prevFiles?: FileCollection
+): TreeNode[] => {
   type Internal = {
     name: string
     path: string
     type: 'file' | 'directory'
     children?: Record<string, Internal>
+    added?: number
+    deleted?: number
   }
 
   const root: Record<string, Internal> = {}
 
-  Object.keys(files).forEach((path) => {
+  // merge both sets of paths to detect deleted files too
+  const allPaths = new Set([
+    ...Object.keys(files || {}),
+    ...Object.keys(prevFiles || {}),
+  ])
+
+  allPaths.forEach((path) => {
     const parts = path.split('/').filter(Boolean)
     let current = root
 
@@ -68,11 +116,17 @@ const buildFileTree = (files: FileCollection): TreeNode[] => {
       const currentPath = parts.slice(0, index + 1).join('/')
 
       if (!current[part]) {
+        const diff = isLast
+          ? calculateLineDiff(files?.[path], prevFiles?.[path])
+          : undefined
+
         current[part] = {
           name: part,
           path: currentPath,
           type: isLast ? 'file' : 'directory',
           children: isLast ? undefined : {},
+          added: diff?.added,
+          deleted: diff?.deleted,
         }
       }
 
@@ -89,6 +143,8 @@ const buildFileTree = (files: FileCollection): TreeNode[] => {
         path: n.path,
         type: n.type,
         children: n.children ? convert(n.children) : undefined,
+        added: n.added,
+        deleted: n.deleted,
       }))
       .sort((a, b) =>
         a.type === b.type
@@ -118,7 +174,7 @@ const TreeItem: React.FC<{
   return (
     <div>
       <div
-        className={`flex items-center h-7 px-2 cursor-pointer text-xs font-mono select-none
+        className={`flex items-center justify-between h-7 px-2 cursor-pointer text-xs font-mono select-none
           ${
             isSelected
               ? 'bg-blue-600/20 dark:bg-blue-500/20 font-medium'
@@ -128,24 +184,55 @@ const TreeItem: React.FC<{
         style={{ paddingLeft: `${level * 12 + 8}px` }}
         onClick={handleClick}
       >
-        {node.type === 'directory' ? (
-          expanded ? (
-            <ChevronDown size={14} className="mr-1 text-gray-500" />
+        <div className="flex items-center min-w-0 flex-1">
+          {node.type === 'directory' ? (
+            expanded ? (
+              <ChevronDown
+                size={14}
+                className="mr-1 text-gray-500 flex-shrink-0"
+              />
+            ) : (
+              <ChevronRight
+                size={14}
+                className="mr-1 text-gray-500 flex-shrink-0"
+              />
+            )
           ) : (
-            <ChevronRight size={14} className="mr-1 text-gray-500" />
-          )
-        ) : (
-          <FileIcon size={14} className="mr-1 text-gray-400" />
+            <File size={14} className="mr-1 text-gray-400 flex-shrink-0" />
+          )}
+          {node.type === 'directory' ? (
+            expanded ? (
+              <FolderOpen
+                size={14}
+                className="mr-1 text-blue-500 flex-shrink-0"
+              />
+            ) : (
+              <Folder size={14} className="mr-1 text-blue-500 flex-shrink-0" />
+            )
+          ) : null}
+          <span className="truncate font-medium text-sm">{node.name}</span>
+        </div>
+
+        {node.type === 'file' && (
+          <div className="ml-2 flex items-center gap-1 flex-shrink-0">
+            {node.added && node.added > 0 ? (
+              <span className="px-1.5 py-0.5 bg-green-500/20 text-green-600 dark:text-green-400 rounded text-[10px] font-semibold">
+                +{node.added}
+              </span>
+            ) : (
+              <></>
+            )}
+            {node.deleted && node.deleted > 0 ? (
+              <span className="px-1.5 py-0.5 bg-red-500/20 text-red-600 dark:text-red-400 rounded text-[10px] font-semibold">
+                -{node.deleted}
+              </span>
+            ) : (
+              <></>
+            )}
+          </div>
         )}
-        {node.type === 'directory' ? (
-          expanded ? (
-            <FolderOpen size={14} className="mr-1 text-blue-500" />
-          ) : (
-            <Folder size={14} className="mr-1 text-blue-500" />
-          )
-        ) : null}
-        <span className="truncate font-medium text-sm">{node.name}</span>
       </div>
+
       {node.type === 'directory' && expanded && node.children && (
         <div className="transition-all">
           {node.children.map((child) => (
@@ -163,11 +250,14 @@ const TreeItem: React.FC<{
   )
 }
 
-const FileExplorer = ({ files }: Props) => {
+const FileExplorer = ({ files, prevFiles }: Props) => {
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
   const [openTabs, setOpenTabs] = useState<string[]>([])
 
-  const fileTree = useMemo(() => buildFileTree(files), [files])
+  const fileTree = useMemo(
+    () => buildFileTree(files, prevFiles),
+    [files, prevFiles]
+  )
 
   useEffect(() => {
     const firstFile = Object.keys(files)[0]
@@ -195,6 +285,9 @@ const FileExplorer = ({ files }: Props) => {
     : 'plaintext'
   const breadcrumb = selectedFile ? selectedFile.split('/').join(' ▸ ') : ''
 
+  const getFileDiff = (path: string) =>
+    calculateLineDiff(files?.[path], prevFiles?.[path])
+
   return (
     <div className="h-full bg-white dark:bg-black overflow-hidden border border-y-0 border-gray-200 dark:border-gray-700 font-sans">
       <ResizablePanelGroup direction="horizontal">
@@ -221,36 +314,38 @@ const FileExplorer = ({ files }: Props) => {
           </div>
         </ResizablePanel>
 
-        <ResizableHandle className="w-1 bg-gray-200 hover:bg-gray-300 dark:bg-gray-950 dark:hover:bg-gray-700 transition-colors" />
+        <ResizableHandle className="w-[1] bg-gray-200 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-700 transition-colors" />
 
         <ResizablePanel defaultSize={78} minSize={65}>
           <div className="h-full flex flex-col">
             <div className="h-10 flex items-center bg-white dark:bg-black border-0 border-b border-gray-200 dark:border-gray-700">
               <div className="flex overflow-x-auto whitespace-nowrap">
-                {openTabs.map((tab) => (
-                  <div
-                    key={tab}
-                    className={`flex items-center px-4 py-2 cursor-pointer text-xs font-mono transition-colors duration-150 border-gray-200 dark:border-gray-700
-                      ${
-                        selectedFile === tab
-                          ? 'bg-gray-100 dark:bg-gray-950 text-blue-400 rounded font-medium'
-                          : 'text-gray-500 hover:bg-gray-200/60 dark:hover:bg-gray-800/60'
-                      }`}
-                    onClick={() => setSelectedFile(tab)}
-                  >
-                    <span className="truncate max-w-[150px]">
-                      {tab.split('/').pop()}
-                    </span>
-                    <X
-                      size={12}
-                      className="ml-2 opacity-60 hover:opacity-100 flex-shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        closeTab(tab)
-                      }}
-                    />
-                  </div>
-                ))}
+                {openTabs.map((tab) => {
+                  return (
+                    <div
+                      key={tab}
+                      className={`flex items-center px-4 py-2 cursor-pointer text-xs font-mono transition-colors duration-150 border-gray-200 dark:border-gray-700
+                        ${
+                          selectedFile === tab
+                            ? 'bg-gray-100 dark:bg-gray-950 text-blue-400 rounded font-medium'
+                            : 'text-gray-500 hover:bg-gray-200/60 dark:hover:bg-gray-800/60'
+                        }`}
+                      onClick={() => setSelectedFile(tab)}
+                    >
+                      <span className="truncate max-w-[150px]">
+                        {tab.split('/').pop()}
+                      </span>
+                      <X
+                        size={12}
+                        className="ml-2 opacity-60 hover:opacity-100 flex-shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          closeTab(tab)
+                        }}
+                      />
+                    </div>
+                  )
+                })}
               </div>
             </div>
 

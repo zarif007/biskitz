@@ -1,5 +1,5 @@
 -- CreateEnum
-CREATE TYPE "public"."MessageRole" AS ENUM ('USER', 'ASSISTANT', 'SYSTEM', 'BUSINESS_ANALYST', 'SYSTEM_ARCHITECT', 'DEVELOPER', 'TESTER', 'SECURITY_ANALYST', 'DEV_OPS');
+CREATE TYPE "public"."MessageRole" AS ENUM ('USER', 'ASSISTANT', 'SYSTEM', 'PROJECT_MANAGER', 'BUSINESS_ANALYST', 'SYSTEM_ARCHITECT', 'DEVELOPER', 'TESTER', 'SECURITY_ANALYST', 'DEV_OPS');
 
 -- CreateEnum
 CREATE TYPE "public"."MessageType" AS ENUM ('RESULT', 'ERROR');
@@ -19,7 +19,10 @@ CREATE TABLE "public"."Message" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "projectId" TEXT NOT NULL,
-    "totalTokens" INTEGER NOT NULL,
+    "inputTokens" INTEGER NOT NULL,
+    "outputTokens" INTEGER NOT NULL,
+    "model" TEXT NOT NULL,
+    "state" TEXT NOT NULL,
     "timeTaken" INTEGER NOT NULL,
 
     CONSTRAINT "Message_pkey" PRIMARY KEY ("id")
@@ -43,6 +46,7 @@ CREATE TABLE "public"."Fragment" (
 CREATE TABLE "public"."Project" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
+    "summary" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "userId" TEXT NOT NULL,

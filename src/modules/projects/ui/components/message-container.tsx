@@ -33,7 +33,7 @@ import { runTestsInWebContainer } from '@/utils/runTestsInWebContainer'
 import convertToOpenAIFormatWithFilter from '@/utils/convertToAIFormat'
 import ModelSelector from '@/components/ModelSelector'
 import modelMapper from '@/utils/modelMapper'
-import Usage from './usage'
+import projectManager from '@/agents/projectManager'
 
 interface Message {
   role: MessageRole
@@ -45,6 +45,7 @@ interface Message {
   inputTokens: number
   outputTokens: number
   model: string
+  state: string
   timeTaken?: number
 }
 
@@ -58,6 +59,7 @@ interface Props {
     inputTokens: number
     outputTokens: number
     model: string
+    state: string
     fragment?: {
       type: FragmentType
       title: string
@@ -68,6 +70,8 @@ interface Props {
   onFragmentClicked: (fragment: Fragment | null) => void
   headerTitle?: string
   tddEnabled: boolean
+  showUsage: boolean
+  setShowUsage: React.Dispatch<React.SetStateAction<boolean>>
 }
 
 const MessageContainer = ({
@@ -78,6 +82,8 @@ const MessageContainer = ({
   onCreateMessage,
   headerTitle = 'Conversation',
   tddEnabled,
+  showUsage,
+  setShowUsage,
 }: Props) => {
   const { data: session } = useSession()
   const bottomRef = useRef<HTMLDivElement | null>(null)
@@ -91,40 +97,6 @@ const MessageContainer = ({
   const [mergedFiles, setMergedFiles] = useState<{ [path: string]: string }>({})
   const hasProcessedInitialMessage = useRef(false)
   const [modelType, setModelType] = useState<'HIGH' | 'MID'>('MID')
-
-  const {
-    totalMessages,
-    totalTimeSeconds,
-    totalInputTokens,
-    totalOutputTokens,
-  } = useMemo(() => {
-    const totalMessages = messages.length
-    const totalTimeSeconds = messages.reduce(
-      (acc, m) => acc + (m.timeTaken || 0),
-      0
-    )
-    const totalInputTokens = messages.reduce(
-      (acc, m) => acc + (m.inputTokens || 0),
-      0
-    )
-    const totalOutputTokens = messages.reduce(
-      (acc, m) => acc + (m.outputTokens || 0),
-      0
-    )
-    return {
-      totalMessages,
-      totalTimeSeconds,
-      totalInputTokens,
-      totalOutputTokens,
-    }
-  }, [messages])
-
-  const formatTime = (seconds: number) => {
-    if (!seconds) return '0s'
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`
-  }
 
   useEffect(() => {
     const lastDevMsg = [...messages]
@@ -165,29 +137,97 @@ const MessageContainer = ({
     }
   }, [messages])
 
+  function getNextAgent(role: string, state: string): string {
+    if (role === 'USER') {
+      if (state === 'INIT' || state === 'REVISE') return 'PROJECT_MANAGER'
+    } else if (role === 'PROJECT_MANAGER') {
+      if (state === 'ANALYSIS') return 'BUSINESS_ANALYST'
+      if (state === 'DESIGN') return 'SYSTEM_ARCHITECT'
+      if (state === 'CODE') return 'DEVELOPER'
+      if (state === 'TEST') return 'TESTER'
+      if (state === 'REVIEW') return 'SECURITY_ENGINEER'
+      if (state === 'DEPLOY') return 'DEVOPS'
+    } else if (role === 'BUSINESS_ANALYST') {
+      if (state === 'DESIGN') return 'SYSTEM_ARCHITECT'
+    } else if (role === 'SYSTEM_ARCHITECT') {
+      if (state === 'TEST') return 'TESTER'
+      if (state === 'CODE') return 'DEVELOPER'
+    } else if (role === 'TESTER') {
+      if (state === 'CODE') return 'DEVELOPER'
+    } else if (role === 'DEVELOPER') {
+      if (state === 'RETEST') return 'TESTER'
+      if (state === 'REVIEW') return 'SECURITY_ENGINEER'
+    } else if (role === 'SECURITY_ENGINEER') {
+      if (state === 'DEPLOY') return 'DEVOPS'
+    }
+
+    return 'Invalid role or state'
+  }
+
+  // Auto handler runner (replaces if/else chain)
+  const processNextStep = async (lastMessage: Message) => {
+    if (!lastMessage) return
+
+    const nextAgent = getNextAgent(
+      lastMessage.role,
+      lastMessage.state || 'INIT'
+    )
+
+    console.log({ nextAgent })
+
+    switch (nextAgent) {
+      case 'PROJECT_MANAGER':
+        await handlePM(lastMessage.content)
+        break
+
+      case 'BUSINESS_ANALYST':
+        await handleBusinessAnalyst(lastMessage.content)
+        break
+
+      case 'SYSTEM_ARCHITECT':
+        await handleSystemArchitect(lastMessage.content)
+        break
+
+      case 'TESTER':
+        await handleTester(lastMessage.content)
+        break
+
+      case 'DEVELOPER':
+        await handleDev(
+          lastMessage.content,
+          (lastMessage.fragment?.files as { [path: string]: string }) || {}
+        )
+        break
+
+      // case 'SECURITY_ENGINEER':
+      //   handleSE(lastMessage.content)
+      //   break
+
+      // case 'DEVOPS':
+      //   testCode(lastMessage.fragment?.files || {})
+      //   break
+
+      default:
+        console.warn('No valid handler for next agent:', nextAgent)
+        return
+    }
+  }
+
   useEffect(() => {
     if (hasProcessedInitialMessage.current) return
     const lastMessage = messages[messages.length - 1]
     if (!lastMessage) return
 
-    // Need to introduce level instead of going role by role as a role may appear multiple times
-    // Also need to add version no. for each agent
-    // Need to introduce product manager role to manage the entire flow
-    if (lastMessage?.role === MessageRole.USER) {
-      handleBusinessAnalyst(lastMessage.content)
-      hasProcessedInitialMessage.current = true
-    } else if (lastMessage?.role === MessageRole.BUSINESS_ANALYST) {
-      handleSystemArchitect(lastMessage.content)
-      hasProcessedInitialMessage.current = true
-    } else if (lastMessage?.role === MessageRole.SYSTEM_ARCHITECT) {
-      handleTester(lastMessage.content)
-      hasProcessedInitialMessage.current = true
-    } else if (lastMessage?.role === MessageRole.TESTER) {
-      handleDev(lastMessage.content, lastMessage.fragment?.files as {})
-      hasProcessedInitialMessage.current = true
-    } else if (lastMessage?.role === MessageRole.DEVELOPER) {
-      testCode(lastMessage.fragment?.files as { [path: string]: string })
-    }
+    // USER => INIT/REVISE => PM
+    // PM => INIT/ANALYSIS => BA, DESIGN => SA, CODE => DEV, TEST => TESTER, REVIEW => SE, DEPLOY => DEVOPS
+    // BA => DESIGN => SA
+    // SA => TEST (TDD) => TESTER, CODE => DEV
+    // TESTER => CODE => DEV
+    // DEV => RETEST (TDD) => TESTER, REVIEW => SE
+    // SE => DEPLOY => DEVOPS
+
+    processNextStep(lastMessage)
+    hasProcessedInitialMessage.current = true
   }, [])
 
   const testCode = async (files: { [path: string]: string }) => {
@@ -206,6 +246,32 @@ const MessageContainer = ({
     return [...relevantMessages, { type: 'text', role, content: newPrompt }]
   }
 
+  const handlePM = async (prompt: string) => {
+    try {
+      setIsProcessing(true)
+      setNextFrom(MessageRole.PROJECT_MANAGER)
+      const projectManagerRes = await projectManager(
+        await buildPromptWithHistory(prompt, 'assistant'),
+        modelMapper(modelType, 'THINK')
+      )
+      const message = {
+        content: projectManagerRes.text,
+        role: MessageRole.PROJECT_MANAGER,
+        timeTaken: projectManagerRes.time_taken_seconds,
+        inputTokens: projectManagerRes.input_tokens,
+        outputTokens: projectManagerRes.output_tokens,
+        model: modelMapper(modelType, 'THINK'),
+        state: projectManagerRes.state,
+      }
+      onCreateMessage(message)
+      if (projectManagerRes.text) await processNextStep(message as Message)
+    } catch (e) {
+      console.error('Error generating code:', e)
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
   const handleBusinessAnalyst = async (prompt: string) => {
     try {
       setIsProcessing(true)
@@ -222,6 +288,7 @@ const MessageContainer = ({
         inputTokens: businessAnalystRes.tokens.input_tokens,
         outputTokens: businessAnalystRes.tokens.output_tokens,
         model: modelMapper(modelType, 'THINK'),
+        state: 'DESIGN',
         fragment: {
           type: FragmentType.DOC,
           files: { ['Analysis Report']: businessAnalystRes.response ?? '' },
@@ -253,6 +320,7 @@ const MessageContainer = ({
         inputTokens: systemArchitectRes.tokens.input_tokens,
         outputTokens: systemArchitectRes.tokens.output_tokens,
         model: modelMapper(modelType, 'THINK'),
+        state: tddEnabled ? 'TEST' : 'CODE',
         fragment: {
           type: FragmentType.DOC,
           files: { ['System Architecture']: systemArchitectRes.response ?? '' },
@@ -281,6 +349,7 @@ const MessageContainer = ({
           inputTokens: 0,
           outputTokens: 0,
           model: '',
+          state: 'CODE',
           fragment: {
             type: FragmentType.CODE,
             files: testerRes?.state.files ?? {},
@@ -325,6 +394,7 @@ const MessageContainer = ({
         inputTokens: devRes.tokens.input_tokens,
         outputTokens: devRes.tokens.output_tokens,
         model: modelMapper(modelType, 'DEV'),
+        state: tddEnabled ? 'RETEST' : 'REVIEW',
         fragment: {
           type: FragmentType.CODE,
           files: updatedFiles,
@@ -351,8 +421,9 @@ const MessageContainer = ({
       inputTokens: 0,
       outputTokens: 0,
       model: modelType,
+      state: 'REVISE',
     })
-    handleDev(messageContent, {})
+    handlePM(messageContent)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -365,30 +436,30 @@ const MessageContainer = ({
   return (
     <div className="h-full flex flex-col border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-black">
       {/* Header */}
-      <div className="h-10 flex-shrink-0 sticky top-0 z-10 bg-white dark:bg-black border-b border-gray-200 dark:border-gray-700 p-2">
-        <div className="flex items-center gap-3">
+      <div className="h-10 flex-shrink-0 sticky top-0 z-10 bg-white dark:bg-black border-b border-gray-200 dark:border-gray-700 px-4 py-2">
+        <div className="flex items-center gap-3 h-full">
           <Link href="/">
             <Button
               variant="ghost"
               size="sm"
-              className="h-4 w-4 p-0 hover:bg-gray-100 dark:hover:bg-gray-800"
+              className="h-6 w-6 p-0 hover:bg-gray-100 dark:hover:bg-gray-800"
             >
               <ArrowLeft className="h-4 w-4" />
               <span className="sr-only">Go back</span>
             </Button>
           </Link>
-          <h2 className="font-semibold text-gray-950 dark:text-gray-100 text-sm">
+          <h2 className="font-semibold text-gray-950 dark:text-gray-100 text-sm leading-none">
             {headerTitle}
           </h2>
-          <div className="flex items-center gap-1 ml-auto">
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-xs">
-                {totalMessages} messages
-              </Badge>
-              <div className="text-xs flex text-gray-500 dark:text-gray-400">
-                <div className="mr-2">{formatTime(totalTimeSeconds)}</div>
-                <Usage messages={messages} />
-              </div>
+          <div className="flex items-center gap-2 ml-auto">
+            <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+              <Button
+                variant="default"
+                className="text-xs cursor-pointer h-7"
+                onClick={() => setShowUsage(!showUsage)}
+              >
+                {showUsage ? 'Hide' : 'Usage'}
+              </Button>
             </div>
           </div>
         </div>
@@ -445,17 +516,17 @@ const MessageContainer = ({
 
                     <div className="flex-1 max-w-[80%]">
                       <Card
-                        className={`p-3 shadow-sm gap-2 ${
+                        className={`shadow-none gap-2 border-0 bg-transparent ${
                           isAssistant
-                            ? 'bg-gray-50 dark:bg-black border-gray-200 dark:border-gray-700'
-                            : 'bg-black dark:bg-gray-100 border-gray-950 dark:border-gray-100'
+                            ? 'p-0 my-2'
+                            : 'bg-black dark:bg-gray-100 border-gray-950 dark:border-gray-100 p-3'
                         }`}
                       >
                         {message.content && (
                           <p
                             className={`text-sm leading-relaxed ${
                               isAssistant
-                                ? 'text-gray-950 dark:text-gray-100'
+                                ? 'text-gray-950 dark:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-sm p-2'
                                 : 'text-white dark:text-gray-950'
                             }`}
                           >
@@ -577,7 +648,7 @@ const MessageContainer = ({
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Type your message... (Press Enter to send, Shift+Enter for new line)"
-              className="w-full resize-none text-sm min-h-[80px] max-h-[120px] bg-gray-50 dark:bg-black border-gray-200 dark:border-gray-700 rounded-md focus:ring-0"
+              className="w-full resize-none text-sm min-h-[80px] max-h-[120px] bg-gray-50 dark:bg-black border-gray-200 dark:border-gray-700 rounded-sm focus:ring-0"
               disabled={isProcessing}
             />
 
@@ -593,7 +664,7 @@ const MessageContainer = ({
               onClick={handleSend}
               disabled={!inputValue || isProcessing}
               size="sm"
-              className="absolute right-2 bottom-2 h-8 px-2 bg-black hover:bg-gray-900 dark:bg-gray-100 dark:hover:bg-gray-200 dark:text-gray-950"
+              className="absolute right-2 bottom-2 h-8 px-2 bg-black hover:bg-gray-900 dark:bg-gray-100 dark:hover:bg-gray-200 dark:text-gray-950 rounded-sm"
             >
               {isMessageCreationPending || isProcessing ? (
                 <svg

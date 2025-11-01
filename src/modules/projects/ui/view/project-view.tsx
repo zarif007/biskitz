@@ -1,7 +1,9 @@
 'use client'
 
 import { useTRPC } from '@/trpc/client'
-import React, { Suspense, useState } from 'react'
+import React, { Suspense, useState, useMemo, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 import {
   ResizableHandle,
   ResizablePanel,
@@ -16,13 +18,17 @@ import {
 import { Fragment, FragmentType, MessageRole } from '@/generated/prisma'
 import FileExplorer from '@/components/FileExplorer'
 import DocView from '../components/doc-view'
+import Usage from '../components/usage'
 
 interface Props {
   projectId: string
 }
 
 export const ProjectView = ({ projectId }: Props) => {
+  const router = useRouter()
+  const { data: session } = useSession()
   const [activeFragment, setActiveFragment] = useState<Fragment | null>(null)
+  const [showUsage, setShowUsage] = useState(false)
   const trpc = useTRPC()
   const queryClient = useQueryClient()
 
@@ -30,9 +36,25 @@ export const ProjectView = ({ projectId }: Props) => {
     trpc.messages.getMany.queryOptions({ projectId })
   )
 
-  const { data: project } = useSuspenseQuery(
+  const { data: project, isError } = useSuspenseQuery(
     trpc.project.getOne.queryOptions({ id: projectId })
   )
+
+  useEffect(() => {
+    if (isError || !project) {
+      router.push('/404')
+    }
+  }, [isError, project, router])
+
+  useEffect(() => {
+    if (
+      project &&
+      session?.user?.email &&
+      project.user.email !== session.user.email
+    ) {
+      router.push('/')
+    }
+  }, [project, session, router])
 
   const createMessage = useMutation(
     trpc.messages.create.mutationOptions({
@@ -60,6 +82,7 @@ export const ProjectView = ({ projectId }: Props) => {
     inputTokens: number
     outputTokens: number
     model?: string
+    state: string
     fragment?: {
       type: FragmentType
       title: string
@@ -77,10 +100,37 @@ export const ProjectView = ({ projectId }: Props) => {
         inputTokens: msg.inputTokens || 0,
         outputTokens: msg.outputTokens || 0,
         model: msg.model || 'gpt-4o',
+        state: msg.state,
       })
     } catch (error) {
       console.error('Message creation failed:', error)
     }
+  }
+
+  const previousDeveloperFiles = useMemo(() => {
+    if (!messages || !activeFragment) return undefined
+
+    const currentMessageIndex = messages.findIndex(
+      (msg) => msg.fragment?.id === activeFragment.id
+    )
+
+    if (currentMessageIndex === -1) return undefined
+
+    const currentMessage = messages[currentMessageIndex]
+    if (currentMessage.role !== 'DEVELOPER') return undefined
+
+    for (let i = currentMessageIndex - 1; i >= 0; i--) {
+      const msg = messages[i]
+      if (msg.role === 'DEVELOPER' && msg.fragment?.files) {
+        return msg.fragment.files as { [path: string]: string }
+      }
+    }
+
+    return undefined
+  }, [messages, activeFragment])
+
+  if (!project || !session?.user?.email) {
+    return null
   }
 
   return (
@@ -96,36 +146,40 @@ export const ProjectView = ({ projectId }: Props) => {
               onFragmentClicked={handleFragmentClicked}
               tddEnabled={project?.tddEnabled || false}
               headerTitle={project?.name}
+              showUsage={showUsage}
+              setShowUsage={setShowUsage}
             />
           </Suspense>
         </ResizablePanel>
-        <ResizableHandle className="w-1 bg-gray-200 hover:bg-gray-300 dark:bg-gray-950 dark:hover:bg-gray-700 transition-colors" />
+        <ResizableHandle className="w-[0] bg-gray-200 hover:bg-gray-300 dark:bg-gray-950 dark:hover:bg-gray-700 transition-colors" />
         <ResizablePanel
           defaultSize={65}
           minSize={60}
           maxSize={80}
           className="flex flex-col"
         >
-          <Suspense fallback={<p>Loading...</p>}>
-            {activeFragment?.type === 'DOC' ? (
-              <div className="h-full overflow-auto">
-                <DocView
-                  files={activeFragment.files as { [path: string]: string }}
-                />
-              </div>
-            ) : (
-              <div className="h-full m-0 overflow-auto">
-                {!!activeFragment && (
-                  // <WebContainerRunner
-                  //   files={activeFragment.files as { [path: string]: string }}
-                  // />
-                  <FileExplorer
+          {showUsage ? (
+            <Usage messages={messages} />
+          ) : (
+            <Suspense fallback={<p>Loading...</p>}>
+              {activeFragment?.type === 'DOC' ? (
+                <div className="h-full overflow-auto">
+                  <DocView
                     files={activeFragment.files as { [path: string]: string }}
                   />
-                )}
-              </div>
-            )}
-          </Suspense>
+                </div>
+              ) : (
+                <div className="h-full m-0 overflow-auto">
+                  {!!activeFragment && (
+                    <FileExplorer
+                      files={activeFragment.files as { [path: string]: string }}
+                      prevFiles={previousDeveloperFiles}
+                    />
+                  )}
+                </div>
+              )}
+            </Suspense>
+          )}
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>
