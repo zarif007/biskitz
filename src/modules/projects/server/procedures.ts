@@ -3,7 +3,6 @@ import { baseProcedure, createTRPCRouter } from '@/trpc/init'
 import prisma from '@/lib/db'
 import { generateSlug } from 'random-word-slugs'
 import { TRPCError } from '@trpc/server'
-import { time } from 'console'
 
 export const projectsRouter = createTRPCRouter({
   getOne: baseProcedure

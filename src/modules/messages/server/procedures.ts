@@ -1,7 +1,6 @@
 import z from 'zod'
 import { baseProcedure, createTRPCRouter } from '@/trpc/init'
 import prisma from '@/lib/db'
-import codeGen from '@/functions/codeGen'
 import { FragmentType, MessageRole, MessageType } from '@/generated/prisma'
 
 export const FragmentSchema = z.object({

@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import React, { useEffect, useState, useRef } from 'react'
 import { Square, Maximize2, Minimize2 } from 'lucide-react'
 import {

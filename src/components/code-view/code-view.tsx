@@ -1,6 +1,5 @@
 import Prism from 'prismjs'
 import React, { useEffect } from 'react'
-import { Copy, Download } from 'lucide-react'
 import 'prismjs/components/prism-javascript'
 import 'prismjs/components/prism-jsx'
 import 'prismjs/components/prism-tsx'
@@ -17,7 +16,7 @@ interface Props {
   fileName?: string
 }
 
-const CodeView = ({ code, lang, fileName = 'code' }: Props) => {
+const CodeView = ({ code, lang }: Props) => {
   useEffect(() => {
     Prism.highlightAll()
   }, [code])

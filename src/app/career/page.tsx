@@ -2,7 +2,7 @@
 
 import { Header } from '@/components/Header'
 import { HireForm } from '@/components/hire-form'
-import React, { useState } from 'react'
+import React from 'react'
 
 const Career = () => {
   return (

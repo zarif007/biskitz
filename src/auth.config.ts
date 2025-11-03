@@ -13,7 +13,7 @@ export default {
     signOut: '/signout',
   },
   callbacks: {
-    authorized({ auth, request: { nextUrl } }) {
+    authorized({ request: {} }) {
       return true
     },
   },

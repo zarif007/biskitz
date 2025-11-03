@@ -32,11 +32,9 @@ const developer = async (
     )
 
     return response.data
-  } catch (error: any) {
-    console.error('Error in developer:', error.response?.data || error.message)
-    throw new Error(
-      error.response?.data?.message || 'Failed to process request'
-    )
+  } catch (error) {
+    console.error('Error in developer:')
+    throw new Error('Failed to process request')
   }
 }
 

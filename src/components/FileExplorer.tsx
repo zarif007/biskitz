@@ -285,9 +285,6 @@ const FileExplorer = ({ files, prevFiles }: Props) => {
     : 'plaintext'
   const breadcrumb = selectedFile ? selectedFile.split('/').join(' ▸ ') : ''
 
-  const getFileDiff = (path: string) =>
-    calculateLineDiff(files?.[path], prevFiles?.[path])
-
   return (
     <div className="h-full bg-white dark:bg-black overflow-hidden border border-y-0 border-gray-200 dark:border-gray-700 font-sans">
       <ResizablePanelGroup direction="horizontal">
@@ -319,7 +316,7 @@ const FileExplorer = ({ files, prevFiles }: Props) => {
         <ResizablePanel defaultSize={78} minSize={65}>
           <div className="h-full flex flex-col">
             <div className="h-10 flex items-center bg-white dark:bg-black border-0 border-b border-gray-200 dark:border-gray-700">
-              <div className="flex overflow-x-auto whitespace-nowrap">
+              <div className="flex overflow-x-auto whitespace-nowrap ml-1">
                 {openTabs.map((tab) => {
                   return (
                     <div

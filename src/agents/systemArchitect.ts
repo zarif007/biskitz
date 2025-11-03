@@ -25,14 +25,9 @@ const systemArchitect = async (
     )
 
     return response.data
-  } catch (error: any) {
-    console.error(
-      'Error in systemArchitect:',
-      error.response?.data || error.message
-    )
-    throw new Error(
-      error.response?.data?.message || 'Failed to process request'
-    )
+  } catch (error) {
+    console.error('Error in systemArchitect:')
+    throw new Error('Failed to process request')
   }
 }
 

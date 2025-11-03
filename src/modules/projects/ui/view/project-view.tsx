@@ -9,7 +9,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from '@/components/ui/resizable'
-import MessageContainer from '../components/message-container'
+
 import {
   useMutation,
   useQueryClient,
@@ -19,6 +19,7 @@ import { Fragment, FragmentType, MessageRole } from '@/generated/prisma'
 import FileExplorer from '@/components/FileExplorer'
 import DocView from '../components/doc-view'
 import Usage from '../components/usage'
+import MessageContainer from '../components/MessageContainer'
 
 interface Props {
   projectId: string

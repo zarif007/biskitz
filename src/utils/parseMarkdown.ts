@@ -1,7 +1,7 @@
 const parseMarkdown = (markdown: string) => {
   if (!markdown) return ''
 
-  let html = markdown
+  const html = markdown
     .replace(
       /^### (.*$)/gim,
       '<h3 class="text-lg font-semibold mb-3 mt-6 text-gray-800 dark:text-gray-100">$1</h3>'
