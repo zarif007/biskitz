@@ -43,6 +43,7 @@ export const messageRouter = createTRPCRouter({
         timeTaken: z.number().min(0),
         model: z.string(),
         state: z.string(),
+        events: z.array(z.string()).default([]),
       })
     )
     .mutation(async ({ input }) => {
@@ -57,6 +58,7 @@ export const messageRouter = createTRPCRouter({
           model: input.model,
           state: input.state,
           timeTaken: input.timeTaken,
+          events: input.events,
           fragment: input.fragment
             ? {
                 create: input.fragment,

@@ -1,49 +1,63 @@
 import { diffLines } from 'diff'
 
 export interface FileCollection {
-  [path: string]: string
+  [path: string]:
+    | string
+    | { mergedLines: string[]; lineStatus: ('|' | '-' | '+')[] }
 }
 
-/**
- * Produces a Git-style merged diff between two FileCollection objects.
- * Each line is prefixed with:
- * [ADDED]   for new lines
- * [REMOVED] for deleted lines
- * [CONST]   for unchanged lines
- */
+export interface FileDiffResult {
+  [path: string]: {
+    mergedLines: string[]
+    lineStatus: ('|' | '-' | '+')[]
+  }
+}
+
 const fileDiff = (
   prevFiles: FileCollection,
   newFiles: FileCollection
-): string => {
-  let output = ''
+): FileDiffResult => {
+  const result: FileDiffResult = {}
 
   const allFileNames = Array.from(
     new Set([...Object.keys(prevFiles), ...Object.keys(newFiles)])
   )
 
   for (const filename of allFileNames) {
-    const prevContent = prevFiles[filename] || ''
-    const newContent = newFiles[filename] || ''
+    const prevContent =
+      typeof prevFiles[filename] === 'string'
+        ? prevFiles[filename]
+        : Array.isArray(prevFiles[filename]?.mergedLines)
+        ? prevFiles[filename].mergedLines.join('\n')
+        : ''
+
+    const newContent =
+      typeof newFiles[filename] === 'string'
+        ? newFiles[filename]
+        : Array.isArray(newFiles[filename]?.mergedLines)
+        ? newFiles[filename].mergedLines.join('\n')
+        : ''
 
     const diff = diffLines(prevContent, newContent)
 
-    for (const part of diff) {
-      const tag = part.added
-        ? '[ADDED]'
-        : part.removed
-        ? '[REMOVED]'
-        : '[CONST]'
+    const mergedLines: string[] = []
+    const lineStatus: ('|' | '-' | '+')[] = []
 
+    for (const part of diff) {
       const lines = part.value.split('\n')
       if (lines.at(-1) === '') lines.pop()
 
+      const status = part.added ? '+' : part.removed ? '-' : '|'
       for (const line of lines) {
-        output += `${tag} ${line}\n`
+        mergedLines.push(line)
+        lineStatus.push(status)
       }
     }
+
+    result[filename] = { mergedLines, lineStatus }
   }
 
-  return output.trimEnd()
+  return result
 }
 
 export default fileDiff

@@ -24,6 +24,7 @@ CREATE TABLE "public"."Message" (
     "model" TEXT NOT NULL,
     "state" TEXT NOT NULL,
     "timeTaken" INTEGER NOT NULL,
+    "events" TEXT[],
 
     CONSTRAINT "Message_pkey" PRIMARY KEY ("id")
 );

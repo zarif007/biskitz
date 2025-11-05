@@ -72,6 +72,12 @@ export const ProjectView = ({ projectId }: Props) => {
 
   const isMessageCreationPending = createMessage.isPending
 
+  const refetchProject = () => {
+    queryClient.invalidateQueries(
+      trpc.project.getOne.queryOptions({ id: projectId })
+    )
+  }
+
   const handleFragmentClicked = (fragment: Fragment | null) => {
     setActiveFragment(fragment)
   }
@@ -89,6 +95,7 @@ export const ProjectView = ({ projectId }: Props) => {
       title: string
       files: Record<string, string>
     }
+    events?: string[]
   }) => {
     try {
       await createMessage.mutateAsync({
@@ -102,6 +109,7 @@ export const ProjectView = ({ projectId }: Props) => {
         outputTokens: msg.outputTokens || 0,
         model: msg.model || 'gpt-4o',
         state: msg.state,
+        events: msg.events || [],
       })
     } catch (error) {
       console.error('Message creation failed:', error)
@@ -149,6 +157,8 @@ export const ProjectView = ({ projectId }: Props) => {
               headerTitle={project?.name}
               showUsage={showUsage}
               setShowUsage={setShowUsage}
+              projectId={projectId}
+              onProjectUpdated={refetchProject}
             />
           </Suspense>
         </ResizablePanel>

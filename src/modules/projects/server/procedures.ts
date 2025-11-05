@@ -12,7 +12,7 @@ export const projectsRouter = createTRPCRouter({
       })
     )
     .query(async ({ input }) => {
-      const project = prisma.project.findUnique({
+      const project = await prisma.project.findUnique({
         where: {
           id: input.id,
         },
@@ -35,6 +35,7 @@ export const projectsRouter = createTRPCRouter({
 
       return project
     }),
+
   getMany: baseProcedure.query(async () => {
     return prisma.project.findMany({
       orderBy: {
@@ -42,6 +43,7 @@ export const projectsRouter = createTRPCRouter({
       },
     })
   }),
+
   create: baseProcedure
     .input(
       z.object({
@@ -89,5 +91,36 @@ export const projectsRouter = createTRPCRouter({
       })
 
       return createdProject
+    }),
+
+  update: baseProcedure
+    .input(
+      z.object({
+        id: z.string().min(1, 'Project ID is required'),
+        data: z
+          .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
+          .refine((val) => Object.keys(val).length > 0, {
+            message: 'At least one field is required to update',
+          }),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const existing = await prisma.project.findUnique({
+        where: { id: input.id },
+      })
+
+      if (!existing) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Project not found',
+        })
+      }
+
+      const updated = await prisma.project.update({
+        where: { id: input.id },
+        data: input.data,
+      })
+
+      return updated
     }),
 })

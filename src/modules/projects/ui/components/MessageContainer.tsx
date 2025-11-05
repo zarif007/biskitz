@@ -34,12 +34,15 @@ import convertToOpenAIFormatWithFilter from '@/utils/convertToAIFormat'
 import ModelSelector from '@/components/ModelSelector'
 import modelMapper from '@/utils/modelMapper'
 import projectManager from '@/agents/projectManager'
+import IContext from '@/types/context'
+import fileDiff from '@/utils/fileDiff'
 
 interface Message {
   role: MessageRole
   content: string
   createdAt: Date
   fragment: Fragment | null
+  events?: string[]
   type: MessageType
   id?: string
   inputTokens: number
@@ -65,6 +68,7 @@ interface Props {
       title: string
       files: Record<string, string>
     }
+    events?: string[]
   }) => void
   activeFragment: Fragment | null
   onFragmentClicked: (fragment: Fragment | null) => void
@@ -72,6 +76,8 @@ interface Props {
   tddEnabled: boolean
   showUsage: boolean
   setShowUsage: React.Dispatch<React.SetStateAction<boolean>>
+  projectId: string
+  onProjectUpdated?: () => void
 }
 
 const MessageContainer = ({
@@ -84,6 +90,8 @@ const MessageContainer = ({
   tddEnabled,
   showUsage,
   setShowUsage,
+  projectId,
+  onProjectUpdated,
 }: Props) => {
   const { data: session } = useSession()
   const bottomRef = useRef<HTMLDivElement | null>(null)
@@ -97,6 +105,7 @@ const MessageContainer = ({
   const [mergedFiles, setMergedFiles] = useState<{ [path: string]: string }>({})
   const hasProcessedInitialMessage = useRef(false)
   const [modelType, setModelType] = useState<'HIGH' | 'MID'>('MID')
+  const [context, setContext] = useState<IContext>({} as IContext)
 
   useEffect(() => {
     const lastDevMsg = [...messages]
@@ -137,6 +146,45 @@ const MessageContainer = ({
     }
   }, [messages])
 
+  const updateContext = (role: MessageRole, files: Record<string, string>) => {
+    const agents = context.agents || {}
+    const prevFiles = agents[role] || {}
+
+    const mergedFiles =
+      Object.keys(prevFiles).length > 0
+        ? fileDiff(prevFiles, files)
+        : Object.fromEntries(
+            Object.entries(files).map(([path, content]) => [
+              path,
+              {
+                mergedLines: content.split('\n'),
+                lineStatus: content.split('\n').map(() => '|'),
+              },
+            ])
+          )
+
+    const updatedContext = {
+      ...context,
+      agents: {
+        ...agents,
+        [role]: mergedFiles,
+      },
+    }
+    setContext(updatedContext)
+
+    return updatedContext
+  }
+
+  const updateContextFromPM = (name: string, summary: string) => {
+    const updatedContext = {
+      ...context,
+      projectName: name,
+      projectSummary: summary,
+    }
+    setContext(updatedContext)
+    return updatedContext
+  }
+
   function getNextAgent(role: string, state: string): string {
     if (role === 'USER') {
       if (state === 'INIT' || state === 'REVISE') return 'PROJECT_MANAGER'
@@ -168,16 +216,11 @@ const MessageContainer = ({
   const processNextStep = async (lastMessage: Message) => {
     if (!lastMessage) return
 
-    const nextAgent = getNextAgent(
-      lastMessage.role,
-      lastMessage.state || 'INIT'
-    )
-
-    console.log({ nextAgent })
+    const nextAgent = getNextAgent(lastMessage.role, lastMessage.state)
 
     switch (nextAgent) {
       case 'PROJECT_MANAGER':
-        await handlePM(lastMessage.content)
+        await handlePM(lastMessage.content, lastMessage.state)
         break
 
       case 'BUSINESS_ANALYST':
@@ -193,10 +236,7 @@ const MessageContainer = ({
         break
 
       case 'DEVELOPER':
-        await handleDev(
-          lastMessage.content,
-          (lastMessage.fragment?.files as { [path: string]: string }) || {}
-        )
+        await handleDev(lastMessage.content)
         break
 
       // case 'SECURITY_ENGINEER':
@@ -241,19 +281,32 @@ const MessageContainer = ({
   }
 
   const buildPromptWithHistory = async (newPrompt: string, role: string) => {
-    const relevantMessages = await convertToOpenAIFormatWithFilter(messages)
+    const relevantMessages = await convertToOpenAIFormatWithFilter(
+      messages,
+      context
+    )
 
     return [...relevantMessages, { type: 'text', role, content: newPrompt }]
   }
 
-  const handlePM = async (prompt: string) => {
+  const handlePM = async (prompt: string, state: string) => {
     try {
       setIsProcessing(true)
       setNextFrom(MessageRole.PROJECT_MANAGER)
       const projectManagerRes = await projectManager(
+        projectId,
+        state as 'INIT' | 'REVISE',
         await buildPromptWithHistory(prompt, 'assistant'),
         modelMapper(modelType, 'THINK')
       )
+
+      if (state === 'INIT') {
+        onProjectUpdated?.()
+        updateContextFromPM(
+          projectManagerRes.name ?? '',
+          projectManagerRes.summary ?? ''
+        )
+      }
       const message = {
         content: projectManagerRes.text,
         role: MessageRole.PROJECT_MANAGER,
@@ -262,9 +315,17 @@ const MessageContainer = ({
         outputTokens: projectManagerRes.output_tokens,
         model: modelMapper(modelType, 'THINK'),
         state: projectManagerRes.state,
+        events: [] as string[],
+      }
+      if (projectManagerRes.name) {
+        message['events'] = [
+          `Updated project name to "${projectManagerRes.name}"`,
+          `Updated project summary`,
+        ]
       }
       onCreateMessage(message)
-      if (projectManagerRes.text) await processNextStep(message as Message)
+      if (projectManagerRes.input_tokens > 0)
+        await processNextStep(message as Message)
     } catch (e) {
       console.error('Error generating code:', e)
     } finally {
@@ -280,6 +341,7 @@ const MessageContainer = ({
         await buildPromptWithHistory(prompt, 'assistant'),
         modelMapper(modelType, 'THINK')
       )
+      const files = { ['Analysis Report']: businessAnalystRes.response ?? '' }
       onCreateMessage({
         content:
           '@sys_arch here’s the requirement. Design the system architecture and define the key modules.',
@@ -291,10 +353,11 @@ const MessageContainer = ({
         state: 'DESIGN',
         fragment: {
           type: FragmentType.DOC,
-          files: { ['Analysis Report']: businessAnalystRes.response ?? '' },
+          files,
           title: 'Analysis Report',
         },
       })
+      updateContext(MessageRole.BUSINESS_ANALYST, files)
       if (businessAnalystRes.response)
         await handleSystemArchitect(businessAnalystRes.response)
     } catch (e) {
@@ -312,6 +375,9 @@ const MessageContainer = ({
         await buildPromptWithHistory(prompt, 'assistant'),
         modelMapper(modelType, 'THINK')
       )
+      const files = {
+        ['System Architecture']: systemArchitectRes.response ?? '',
+      }
       onCreateMessage({
         content:
           '@dev here’s the system design. Implement it as a complete NPM package.',
@@ -323,10 +389,12 @@ const MessageContainer = ({
         state: tddEnabled ? 'TEST' : 'CODE',
         fragment: {
           type: FragmentType.DOC,
-          files: { ['System Architecture']: systemArchitectRes.response ?? '' },
+          files,
           title: 'System Architecture',
         },
       })
+      updateContext(MessageRole.SYSTEM_ARCHITECT, files)
+      console.log(MessageRole.SYSTEM_ARCHITECT, context)
       if (systemArchitectRes.response)
         await handleTester(systemArchitectRes.response)
     } catch (e) {
@@ -356,9 +424,9 @@ const MessageContainer = ({
             title: 'Code',
           },
         })
-        if (testerRes) await handleDev(prompt, testerRes?.state.files ?? {})
+        if (testerRes) await handleDev(prompt)
       } else {
-        await handleDev(prompt, {})
+        await handleDev(prompt)
       }
     } catch (e) {
       console.error('Error generating code:', e)
@@ -367,10 +435,7 @@ const MessageContainer = ({
     }
   }
 
-  const handleDev = async (
-    prompt: string,
-    files: { [path: string]: string }
-  ) => {
+  const handleDev = async (prompt: string) => {
     try {
       setIsProcessing(true)
       setNextFrom(MessageRole.DEVELOPER)
@@ -382,7 +447,7 @@ const MessageContainer = ({
       )
 
       const newFiles = devRes?.state.files ?? {}
-      const updatedFiles = { ...mergedFiles, ...files, ...newFiles }
+      const updatedFiles = { ...mergedFiles, ...newFiles }
 
       setMergedFiles(updatedFiles)
 
@@ -423,7 +488,7 @@ const MessageContainer = ({
       model: modelType,
       state: 'REVISE',
     })
-    handlePM(messageContent)
+    handlePM(messageContent, 'REVISE')
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -610,6 +675,15 @@ const MessageContainer = ({
                                   </ul>
                                 </div>
                               )}
+                          </div>
+                        )}
+                        {message.events && message.events.length > 0 && (
+                          <div className="mt-0 space-y-1">
+                            {message.events.map((event) => (
+                              <p className="text-xs w-full p-[6] bg-transparent text-gray-700 dark:text-gray-300 underline">
+                                {event}
+                              </p>
+                            ))}
                           </div>
                         )}
                       </Card>

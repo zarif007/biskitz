@@ -1,4 +1,5 @@
 import { Fragment, MessageRole, MessageType } from '@/generated/prisma'
+import IContext from '@/types/context'
 import { JsonValue } from '@prisma/client/runtime/library'
 
 interface LLMConversation {
@@ -71,8 +72,10 @@ const formatFragmentFiles = (
 
 const convertToOpenAIFormatWithFilter = (
   messages: Message[],
+  context: IContext,
   options?: ConversionOptions
 ): LLMConversation[] => {
+  console.log(context)
   let filtered = messages
 
   if (options?.excludeTypes) {

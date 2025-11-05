@@ -22,13 +22,13 @@ const DocView = ({ files }: Props) => {
 
   return (
     <div
-      className={`min-h-screen transition-colors duration-200 dark:bg-gray-900 bg-gray-50`}
+      className={`min-h-screen transition-colors duration-200 dark:bg-gray-950 bg-gray-100`}
     >
       <div className="flex">
         <aside
           className={`${
             sidebarOpen ? 'w-64' : 'w-0'
-          } bg-white dark:bg-gray-950 border-r border-gray-200 dark:border-gray-700 transition-all duration-300 overflow-hidden`}
+          } bg-white dark:bg-black border-r border-gray-200 dark:border-gray-700 transition-all duration-300 overflow-hidden`}
         >
           <div className="p-4">
             <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">
@@ -75,7 +75,7 @@ const DocView = ({ files }: Props) => {
 
           {selectedFile ? (
             <div className="max-w-4xl mx-auto">
-              <div className="bg-white dark:bg-gray-950 min-h-screen">
+              <div className="bg-white dark:bg-black min-h-screen">
                 <div className="px-8 py-8 pt-16">
                   <div
                     className="prose prose-lg max-w-none leading-relaxed text-gray-700 dark:text-gray-300"
