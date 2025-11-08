@@ -70,44 +70,57 @@ const formatFragmentFiles = (
   }
 }
 
+const convertToLines = (context: IContext, agent: MessageRole): string => {
+  let lines = 'Context from agent ' + agent + ':\n'
+
+  const agentData = context.agents?.[agent]
+  if (!agentData) return lines
+
+  lines += agentData.text + '\n\n'
+
+  Object.keys(agentData.files).forEach((fileName) => {
+    lines += `From File ${fileName}:\n`
+
+    const file = agentData.files[fileName]
+    for (let i = 0; i < file.mergedLines.length; i++) {
+      lines += `[${file.lineStatus[i]}] ${file.mergedLines[i]}\n`
+    }
+  })
+
+  return lines
+}
+
 const convertToOpenAIFormatWithFilter = (
-  messages: Message[],
   context: IContext,
   options?: ConversionOptions
 ): LLMConversation[] => {
-  console.log(context)
-  let filtered = messages
+  const msg: LLMConversation[] = []
 
-  if (options?.excludeTypes) {
-    filtered = filtered.filter(
-      (msg) => !options.excludeTypes!.includes(msg.type)
-    )
-  }
-
-  if (options?.includeRoles) {
-    filtered = filtered.filter((msg) =>
-      options.includeRoles!.includes(msg.role)
-    )
-  }
-
-  return filtered.map((msg) => {
-    let content = msg.content
-
-    if (msg.fragment?.files) {
-      const fragmentContent = formatFragmentFiles(
-        msg.fragment.files,
-        options?.fragmentFormat ?? 'inline',
-        options?.maxFileContentLength
-      )
-      content += fragmentContent
-    }
-
-    return {
+  // 0️⃣ Add context name and summary as the first message
+  if (context.name) {
+    msg.push({
       type: 'text',
-      role: msg.role === 'USER' ? 'user' : 'assistant',
-      content,
-    }
-  })
+      role: 'assistant',
+      content: `Project: ${context.name}\nSummary: ${
+        context.summary || 'No summary provided.'
+      }`,
+    })
+  }
+
+  // 1️⃣ Add context from agents if it exists
+  if (context.agents && Object.keys(context.agents).length > 0) {
+    Object.keys(context.agents).forEach((agent) => {
+      const agentRole = agent as MessageRole
+      const contextLines = convertToLines(context, agentRole)
+      msg.push({
+        type: 'text',
+        role: agentRole === MessageRole.USER ? 'user' : 'assistant',
+        content: contextLines,
+      })
+    })
+  }
+
+  return msg
 }
 
 export default convertToOpenAIFormatWithFilter

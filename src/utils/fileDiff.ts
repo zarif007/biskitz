@@ -1,21 +1,19 @@
 import { diffLines } from 'diff'
 
 export interface FileCollection {
-  [path: string]:
-    | string
-    | { mergedLines: string[]; lineStatus: ('|' | '-' | '+')[] }
+  [path: string]: { mergedLines: string[]; lineStatus: string[] }
 }
 
 export interface FileDiffResult {
   [path: string]: {
     mergedLines: string[]
-    lineStatus: ('|' | '-' | '+')[]
+    lineStatus: string[]
   }
 }
 
 const fileDiff = (
   prevFiles: FileCollection,
-  newFiles: FileCollection
+  newFiles: FileCollection | Record<string, string>
 ): FileDiffResult => {
   const result: FileDiffResult = {}
 

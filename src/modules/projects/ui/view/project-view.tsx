@@ -20,6 +20,7 @@ import FileExplorer from '@/components/FileExplorer'
 import DocView from '../components/doc-view'
 import Usage from '../components/usage'
 import MessageContainer from '../components/MessageContainer'
+import IContext from '@/types/context'
 
 interface Props {
   projectId: string
@@ -155,6 +156,7 @@ export const ProjectView = ({ projectId }: Props) => {
               onFragmentClicked={handleFragmentClicked}
               tddEnabled={project?.tddEnabled || false}
               headerTitle={project?.name}
+              projectContext={project?.context as unknown as IContext}
               showUsage={showUsage}
               setShowUsage={setShowUsage}
               projectId={projectId}

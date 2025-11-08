@@ -49,6 +49,7 @@ model Project {
   tddEnabled  Boolean     @default(false)
   messages    Message[]
   user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  context Json @default("{}")
 }
 
 model User {

@@ -53,6 +53,7 @@ CREATE TABLE "public"."Project" (
     "userId" TEXT NOT NULL,
     "packageType" "public"."PackageType" NOT NULL,
     "tddEnabled" BOOLEAN NOT NULL DEFAULT false,
+    "context" JSONB NOT NULL DEFAULT '{}',
 
     CONSTRAINT "Project_pkey" PRIMARY KEY ("id")
 );
