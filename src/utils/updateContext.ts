@@ -3,7 +3,6 @@ import fileDiff from './fileDiff'
 import { MessageRole } from '@/generated/prisma'
 
 const updateContext = (
-  projectId: string,
   text: string,
   role: MessageRole,
   files: Record<string, string>,

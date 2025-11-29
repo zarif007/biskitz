@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { FileText, Moon, Sun, ChevronLeft, ChevronRight } from 'lucide-react'
+import { FileText, ChevronLeft, ChevronRight } from 'lucide-react'
 import parseMarkdown from '@/utils/parseMarkdown'
 
 interface Props {

@@ -18,6 +18,8 @@ import { useTRPC } from '@/trpc/client'
 import { useMutation } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import ModelSelector from './ModelSelector'
+import updateContext from '@/utils/updateContext'
+import IContext from '@/types/context'
 
 const PromptInput = () => {
   const trpc = useTRPC()
@@ -36,15 +38,23 @@ const PromptInput = () => {
     setLoading(true)
     try {
       setUserInput('')
+      const updatedContext: IContext = updateContext(
+        input,
+        'USER',
+        {},
+        {} as IContext
+      )
       const res = await createProject.mutateAsync({
         value: input,
         packageType,
         tddEnabled,
         model: modelType,
+        context: updatedContext,
         inputTokens: 0,
         outputTokens: 0,
         timeTaken: 0,
       })
+
       router.push(`/projects/${res.id}`)
     } catch (error) {
       console.log(error)

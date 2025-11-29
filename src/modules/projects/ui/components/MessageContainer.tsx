@@ -14,6 +14,9 @@ import MessageList from './messageContainer/MessageList'
 import MessageInput from './messageContainer/MessageInput'
 import { Message, MessageContainerProps } from './messageContainer/types'
 import updateContext from '@/utils/updateContext'
+import { useTRPC } from '@/trpc/client'
+import { useMutation } from '@tanstack/react-query'
+import { Button } from '@/components/ui/button'
 
 const MessageContainer = ({
   messages,
@@ -29,6 +32,9 @@ const MessageContainer = ({
   onProjectUpdated,
   projectContext,
 }: MessageContainerProps) => {
+  const trpc = useTRPC()
+  const updateProject = useMutation(trpc.project.update.mutationOptions({}))
+
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const scrollAreaRef = useRef<HTMLDivElement | null>(null)
   const [inputValue, setInputValue] = useState('')
@@ -81,17 +87,18 @@ const MessageContainer = ({
     }
   }, [messages])
 
-  const updateInfo = (
+  const updateInfo = async (
     name: string,
     summary: string,
     currentContext: IContext
   ) => {
     const updatedContext = {
       ...currentContext,
-      projectName: name,
-      projectSummary: summary,
+      name,
+      summary,
     }
     setContext(updatedContext)
+    await updateContextToDB(updatedContext)
     return updatedContext
   }
 
@@ -166,6 +173,15 @@ const MessageContainer = ({
     hasProcessedInitialMessage.current = true
   }, [])
 
+  const updateContextToDB = async (updatedContext: IContext) => {
+    await updateProject.mutateAsync({
+      id: projectId,
+      data: {
+        context: JSON.stringify(updatedContext),
+      },
+    })
+  }
+
   const testCode = async (files: { [path: string]: string }) => {
     if (!tddEnabled) return
     console.log(
@@ -174,24 +190,6 @@ const MessageContainer = ({
         files,
       })
     )
-  }
-
-  const buildPromptWithHistory = async (
-    newPrompt: string,
-    role: string,
-    currentContext: IContext
-  ) => {
-    const relevantMessages = convertToOpenAIFormatWithFilter(currentContext)
-    console.log(relevantMessages)
-    // if (add) {
-    //   console.log([
-    //     ...relevantMessages,
-    //     { type: 'text', role, content: newPrompt },
-    //   ])
-    //   return [...relevantMessages, { type: 'text', role, content: newPrompt }]
-    // }
-    // console.log(relevantMessages)
-    return relevantMessages
   }
 
   const handlePM = async (
@@ -205,13 +203,20 @@ const MessageContainer = ({
       const projectManagerRes = await projectManager(
         projectId,
         state as 'INIT' | 'REVISE',
-        await buildPromptWithHistory(prompt, 'user', currentContext),
+        convertToOpenAIFormatWithFilter(currentContext, {
+          includeRoles: [
+            MessageRole.USER,
+            MessageRole.BUSINESS_ANALYST,
+            MessageRole.SYSTEM_ARCHITECT,
+          ],
+        }),
         modelMapper(modelType, 'THINK')
       )
 
+      let updatedInfo = currentContext
       if (state === 'INIT') {
         onProjectUpdated?.()
-        updateInfo(
+        updatedInfo = await updateInfo(
           projectManagerRes.name ?? '',
           projectManagerRes.summary ?? '',
           currentContext
@@ -235,13 +240,13 @@ const MessageContainer = ({
       }
       onCreateMessage(message)
       let updatedContext = updateContext(
-        projectId,
         projectManagerRes.text,
         MessageRole.PROJECT_MANAGER,
         {},
-        currentContext
+        updatedInfo
       )
       setContext(updatedContext)
+      await updateContextToDB(updatedContext)
       if (projectManagerRes.input_tokens > 0)
         await processNextStep(message as Message, updatedContext)
     } catch (e) {
@@ -259,7 +264,9 @@ const MessageContainer = ({
       setIsProcessing(true)
       setNextFrom(MessageRole.BUSINESS_ANALYST)
       const businessAnalystRes = await businessAnalyst(
-        await buildPromptWithHistory(prompt, 'assistant', currentContext),
+        convertToOpenAIFormatWithFilter(currentContext, {
+          includeRoles: [MessageRole.USER, MessageRole.PROJECT_MANAGER],
+        }),
         modelMapper(modelType, 'THINK')
       )
       const files = { ['Analysis Report']: businessAnalystRes.response ?? '' }
@@ -278,13 +285,13 @@ const MessageContainer = ({
         },
       })
       const updatedContext = updateContext(
-        projectId,
         '',
         MessageRole.BUSINESS_ANALYST,
         files,
         currentContext
       )
       setContext(updatedContext)
+      await updateContextToDB(updatedContext)
       if (businessAnalystRes.response)
         await handleSystemArchitect(businessAnalystRes.response, updatedContext)
     } catch (e) {
@@ -293,6 +300,9 @@ const MessageContainer = ({
       setIsProcessing(false)
     }
   }
+
+  // Build a CLI to mimic NPM repo
+  // Then deploy to NPM
 
   const handleSystemArchitect = async (
     prompt: string,
@@ -303,7 +313,13 @@ const MessageContainer = ({
       setIsProcessing(true)
       setNextFrom(MessageRole.SYSTEM_ARCHITECT)
       const systemArchitectRes = await systemArchitect(
-        await buildPromptWithHistory(prompt, 'assistant', currentContext),
+        convertToOpenAIFormatWithFilter(currentContext, {
+          includeRoles: [
+            MessageRole.USER,
+            MessageRole.PROJECT_MANAGER,
+            MessageRole.BUSINESS_ANALYST,
+          ],
+        }),
         modelMapper(modelType, 'THINK')
       )
       const files = {
@@ -324,13 +340,13 @@ const MessageContainer = ({
         },
       })
       const updatedContext = updateContext(
-        projectId,
         '',
         MessageRole.SYSTEM_ARCHITECT,
         files,
         currentContext
       )
       setContext(updatedContext)
+      await updateContextToDB(updatedContext)
       if (systemArchitectRes.response)
         await handleTester(systemArchitectRes.response, updatedContext)
     } catch (e) {
@@ -376,7 +392,14 @@ const MessageContainer = ({
       setIsProcessing(true)
       setNextFrom(MessageRole.DEVELOPER)
       const devRes = await developer(
-        await buildPromptWithHistory(prompt, 'assistant', currentContext),
+        convertToOpenAIFormatWithFilter(currentContext, {
+          includeRoles: [
+            MessageRole.USER,
+            MessageRole.PROJECT_MANAGER,
+            MessageRole.SYSTEM_ARCHITECT,
+            MessageRole.TESTER,
+          ],
+        }),
         mergedFiles,
         tddEnabled,
         modelMapper(modelType, 'DEV')
@@ -404,13 +427,13 @@ const MessageContainer = ({
       })
 
       const updatedContext = updateContext(
-        projectId,
         '',
         MessageRole.DEVELOPER,
         updatedFiles,
         currentContext
       )
       setContext(updatedContext)
+      await updateContextToDB(updatedContext)
       await testCode(updatedFiles)
     } catch (e) {
       console.error('Error generating code:', e)
@@ -419,7 +442,7 @@ const MessageContainer = ({
     }
   }
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!inputValue) return
     const messageContent = inputValue
     setInputValue('')
@@ -433,13 +456,13 @@ const MessageContainer = ({
       state: 'REVISE',
     })
     const updatedContext = updateContext(
-      projectId,
       messageContent,
       MessageRole.USER,
       {},
       context
     )
     setContext(updatedContext)
+    await updateContextToDB(updatedContext)
     handlePM(messageContent, 'REVISE', updatedContext)
   }
 
@@ -468,6 +491,9 @@ const MessageContainer = ({
         isProcessing={isProcessing}
         nextFrom={nextFrom}
       />
+      {/* <div className="h-6 border bg-white dark:bg-black justify-end items-center flex px-4">
+        <Button className="tex-xs py-0 h-4">Continue</Button>
+      </div> */}
       <MessageInput
         inputValue={inputValue}
         setInputValue={setInputValue}

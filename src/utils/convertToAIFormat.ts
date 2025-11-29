@@ -1,6 +1,5 @@
 import { Fragment, MessageRole, MessageType } from '@/generated/prisma'
 import IContext from '@/types/context'
-import { JsonValue } from '@prisma/client/runtime/library'
 
 interface LLMConversation {
   type: string
@@ -19,55 +18,13 @@ interface Message {
   timeTaken?: number
 }
 
-interface FileObject {
-  [path: string]: string
-}
-
 interface ConversionOptions {
   excludeTypes?: string[]
   includeRoles?: MessageRole[]
   includeFragmentFiles?: boolean
   fragmentFormat?: 'inline' | 'summary' | 'paths-only'
   maxFileContentLength?: number
-}
-
-const formatFragmentFiles = (
-  files: JsonValue,
-  format: 'inline' | 'summary' | 'paths-only' = 'inline',
-  maxLength?: number
-): string => {
-  if (!files || typeof files !== 'object' || Array.isArray(files)) {
-    return ''
-  }
-
-  const fileObj = files as FileObject
-  const filePaths = Object.keys(fileObj)
-
-  if (filePaths.length === 0) return ''
-
-  switch (format) {
-    case 'paths-only':
-      return `\n\n[Previously generated files: ${filePaths.join(', ')}]`
-
-    case 'summary':
-      return `\n\n[Previously generated ${
-        filePaths.length
-      } file(s): ${filePaths.join(', ')}]`
-
-    case 'inline':
-    default:
-      const fileContents = filePaths
-        .map((path) => {
-          let content = fileObj[path]
-          if (maxLength && content.length > maxLength) {
-            content = content.substring(0, maxLength) + '\n... (truncated)'
-          }
-          return `<file path="${path}">\n${content}\n</file>`
-        })
-        .join('\n\n')
-
-      return `\n\n<previously_generated_files>\n${fileContents}\n</previously_generated_files>`
-  }
+  rolesToTake?: MessageRole[]
 }
 
 const convertToLines = (context: IContext, agent: MessageRole): string => {
@@ -109,8 +66,20 @@ const convertToOpenAIFormatWithFilter = (
 
   // 1️⃣ Add context from agents if it exists
   if (context.agents && Object.keys(context.agents).length > 0) {
+    const rolesToTake = options?.rolesToTake
+
     Object.keys(context.agents).forEach((agent) => {
       const agentRole = agent as MessageRole
+
+      // Skip this agent if rolesToTake is specified and doesn't include this role
+      if (
+        rolesToTake &&
+        rolesToTake.length > 0 &&
+        !rolesToTake.includes(agentRole)
+      ) {
+        return
+      }
+
       const contextLines = convertToLines(context, agentRole)
       msg.push({
         type: 'text',
