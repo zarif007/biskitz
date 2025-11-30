@@ -187,6 +187,7 @@ export const ProjectView = ({ projectId }: Props) => {
                     <FileExplorer
                       files={activeFragment.files as { [path: string]: string }}
                       prevFiles={previousDeveloperFiles}
+                      projectName={project.name}
                     />
                   )}
                 </div>

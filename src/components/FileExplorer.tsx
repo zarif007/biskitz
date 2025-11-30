@@ -34,6 +34,7 @@ interface Props {
   files: FileCollection
   prevFiles?: FileCollection
   isTerminalOpen?: boolean
+  projectName?: string
 }
 
 interface TreeNode {
@@ -797,7 +798,12 @@ const Terminal: React.FC<TerminalProps> = ({ files, onClose }) => {
   )
 }
 
-const FileExplorer = ({ files, prevFiles, isTerminalOpen = false }: Props) => {
+const FileExplorer = ({
+  files,
+  prevFiles,
+  isTerminalOpen = false,
+  projectName = 'new-project',
+}: Props) => {
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
   const [openTabs, setOpenTabs] = useState<string[]>([])
   const [isTerminalOpenState, setIsTerminalOpen] = useState(isTerminalOpen)
@@ -855,7 +861,7 @@ const FileExplorer = ({ files, prevFiles, isTerminalOpen = false }: Props) => {
                 </button>
               )}
               <button
-                onClick={() => downloadAsZip(files, 'my-project')}
+                onClick={() => downloadAsZip(files, projectName)}
                 className="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors opacity-70 hover:opacity-100"
                 title="Download all files as ZIP"
               >

@@ -271,7 +271,7 @@ const MessageContainer = ({
       )
       const files = { ['Analysis Report']: businessAnalystRes.response ?? '' }
       onCreateMessage({
-        content: `@sys_arch here's the requirement. Design the system architecture and define the key modules.`,
+        content: `@pm @sys_arch`,
         role: MessageRole.BUSINESS_ANALYST,
         timeTaken: businessAnalystRes.time_taken_seconds,
         inputTokens: businessAnalystRes.tokens.input_tokens,
@@ -326,7 +326,7 @@ const MessageContainer = ({
         ['System Architecture']: systemArchitectRes.response ?? '',
       }
       onCreateMessage({
-        content: `@dev here's the system design. Implement it as a complete NPM package.`,
+        content: `@pm @dev`,
         role: MessageRole.SYSTEM_ARCHITECT,
         timeTaken: systemArchitectRes.time_taken_seconds,
         inputTokens: systemArchitectRes.tokens.input_tokens,
@@ -411,8 +411,7 @@ const MessageContainer = ({
       setMergedFiles(updatedFiles)
 
       onCreateMessage({
-        content:
-          '@security_engineer code is ready. Review for security issues and vulnerabilities.',
+        content: tddEnabled ? '@tester' : '@security_engineer',
         role: MessageRole.DEVELOPER,
         timeTaken: devRes.time_taken_seconds,
         inputTokens: devRes.tokens.input_tokens,
